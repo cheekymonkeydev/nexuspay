@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REJECTED
+}
+
+enum PolicyTier {
+  CONSERVATIVE
+  MODERATE
+  AGGRESSIVE
+  CUSTOM
+}
+
+enum AgentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+model AgentWallet {
+  id            String        @id @default(cuid())
+  agentId       String        @unique
+  address       String
+  cdpWalletId   String?
+  balanceUsdc   Float         @default(0)
+  status        AgentStatus   @default(ACTIVE)
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  sentTransactions     Transaction[] @relation("SentTransactions")
+  receivedTransactions Transaction[] @relation("ReceivedTransactions")
+  policies             SpendingPolicy[]
+  credentials          AgentCredential[]
+
+  @@map("agent_wallets")
+}
+
+model SpendingPolicy {
+  id                  String      @id @default(cuid())
+  agentId             String
+  tier                PolicyTier  @default(CUSTOM)
+  maxPerTransaction   Float
+  dailyLimit          Float
+  monthlyLimit        Float?
+  allowedRecipients   String[]
+  blockedMerchants    String[]
+  allowedCategories   String[]
+  requireApproval     Boolean     @default(false)
+  isActive            Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  agent AgentWallet @relation(fields: [agentId], references: [agentId])
+
+  @@map("spending_policies")
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  fromAgentId     String
+  toAddress       String
+  toAgentId       String?
+  amountUsdc      Float
+  status          TransactionStatus @default(PENDING)
+  txHash          String?
+  category        String?
+  memo            String?
+  isP2P           Boolean           @default(false)
+  policyChecks    Json?
+  failureReason   String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  fromAgent   AgentWallet  @relation("SentTransactions", fields: [fromAgentId], references: [agentId])
+  toAgent     AgentWallet? @relation("ReceivedTransactions", fields: [toAgentId], references: [agentId])
+
+  @@map("transactions")
+}
+
+model AgentCredential {
+  id          String      @id @default(cuid())
+  agentId     String
+  label       String
+  publicKey   String
+  did         String?
+  jwt         String?
+  isRevoked   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  agent AgentWallet @relation(fields: [agentId], references: [agentId])
+
+  @@map("agent_credentials")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  name        String
+  keyHash     String   @unique
+  prefix      String
+  scopes      String[]
+  isActive    Boolean  @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@map("api_keys")
+}
+
+model Treasury {
+  id              String  @id @default("default")
+  balanceUsdc     Float   @default(0)
+  totalFunded     Float   @default(0)
+  totalDisbursed  Float   @default(0)
+
+  @@map("treasury")
+}
+
+model PaywallEndpoint {
+  id          String   @id @default(cuid())
+  path        String   @unique
+  priceUsdc   Float
+  description String?
+  isActive    Boolean  @default(true)
+  totalPaid   Float    @default(0)
+  hitCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@map("paywall_endpoints")
+}
