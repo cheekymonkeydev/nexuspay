@@ -352,6 +352,14 @@ export default function LandingPage() {
               onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
             >{item}</a>
           ))}
+          <Link href="/docs" style={{
+            fontSize: 13, fontWeight: 500,
+            color: "var(--text-secondary)",
+            transition: "color 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+          >Docs</Link>
           <Link href="/dashboard" style={{
             padding: "9px 22px", borderRadius: 99,
             background: "var(--gradient-brand)",
