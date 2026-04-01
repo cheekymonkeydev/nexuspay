@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { sendUSDC } from "@/lib/cdp";
 import { SendTransactionInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
+import { enforcePolicies } from "@/lib/policy";
 
 export async function GET(req: NextRequest) {
   try {
@@ -35,63 +36,39 @@ export async function POST(req: NextRequest) {
     // 2. Balance check
     if (wallet.balanceUsdc < input.amountUsdc) return err("Insufficient balance", 400);
 
-    // 3. Policy checks
-    const policies = await prisma.spendingPolicy.findMany({
-      where: { agentId: input.fromAgentId, isActive: true },
+    // 3. Policy enforcement (includes monthly limits)
+    const policyResult = await enforcePolicies(input.fromAgentId, input.amountUsdc, {
+      category: input.category,
+      toAddress: input.toAddress,
     });
-
-    const checks: Record<string, boolean> = {};
-    for (const p of policies) {
-      // Per-transaction limit
-      if (input.amountUsdc > p.maxPerTransaction) {
-        checks.maxPerTransaction = false;
-        return err(`Exceeds per-transaction limit of $${p.maxPerTransaction}`, 403);
-      }
-      checks.maxPerTransaction = true;
-
-      // Blocked merchants
-      if (input.category && p.blockedMerchants.includes(input.category)) {
-        checks.blockedMerchant = false;
-        return err(`Category "${input.category}" is blocked`, 403);
-      }
-      checks.blockedMerchant = true;
-
-      // Allowed categories
-      if (input.category && p.allowedCategories.length > 0 && !p.allowedCategories.includes(input.category)) {
-        checks.allowedCategory = false;
-        return err(`Category "${input.category}" not in allowed list`, 403);
-      }
-      checks.allowedCategory = true;
-
-      // Allowed recipients
-      if (p.allowedRecipients.length > 0 && !p.allowedRecipients.includes(input.toAddress)) {
-        checks.allowedRecipient = false;
-        return err("Recipient not in allowlist", 403);
-      }
-      checks.allowedRecipient = true;
-
-      // Daily limit
-      const dayStart = new Date();
-      dayStart.setHours(0, 0, 0, 0);
-      const dailySpent = await prisma.transaction.aggregate({
-        where: { fromAgentId: input.fromAgentId, status: "CONFIRMED", createdAt: { gte: dayStart } },
-        _sum: { amountUsdc: true },
+    if (!policyResult.passed) {
+      // Create rejected transaction for audit trail
+      await prisma.transaction.create({
+        data: {
+          fromAgentId: input.fromAgentId,
+          toAddress: input.toAddress,
+          amountUsdc: input.amountUsdc,
+          category: input.category,
+          memo: input.memo,
+          status: "REJECTED",
+          policyChecks: policyResult.checks,
+          failureReason: policyResult.failureReason,
+        },
       });
-      if ((dailySpent._sum.amountUsdc ?? 0) + input.amountUsdc > p.dailyLimit) {
-        checks.dailyLimit = false;
-        return err(`Would exceed daily limit of $${p.dailyLimit}`, 403);
-      }
-      checks.dailyLimit = true;
-
-      // Approval gate
-      if (p.requireApproval) {
-        checks.approval = false;
-        return err("Transaction requires manual approval", 403);
-      }
-      checks.approval = true;
+      return err(policyResult.failureReason || "Policy check failed", 403);
     }
 
-    // 4. Create pending transaction
+    // 4. Race-safe balance decrement (WHERE balanceUsdc >= amount)
+    const decremented = await prisma.agentWallet.updateMany({
+      where: { agentId: input.fromAgentId, balanceUsdc: { gte: input.amountUsdc } },
+      data: { balanceUsdc: { decrement: input.amountUsdc } },
+    });
+
+    if (decremented.count === 0) {
+      return err("Insufficient balance (concurrent transaction)", 409);
+    }
+
+    // 5. Create pending transaction
     const tx = await prisma.transaction.create({
       data: {
         fromAgentId: input.fromAgentId,
@@ -100,25 +77,38 @@ export async function POST(req: NextRequest) {
         category: input.category,
         memo: input.memo,
         status: "PENDING",
-        policyChecks: checks,
+        policyChecks: policyResult.checks,
       },
     });
 
-    // 5. Settle on-chain
-    const { txHash } = await sendUSDC(wallet.cdpWalletId, input.toAddress, input.amountUsdc);
+    // 6. Settle on-chain
+    try {
+      const { txHash } = await sendUSDC(wallet.cdpWalletId, input.toAddress, input.amountUsdc);
 
-    // 6. Update balances and transaction
-    await prisma.$transaction([
-      prisma.agentWallet.update({
-        where: { agentId: input.fromAgentId },
-        data: { balanceUsdc: { decrement: input.amountUsdc } },
-      }),
-      prisma.transaction.update({
+      // Mark confirmed
+      const confirmed = await prisma.transaction.update({
         where: { id: tx.id },
         data: { status: "CONFIRMED", txHash },
-      }),
-    ]);
+      });
 
-    return ok({ ...tx, status: "CONFIRMED", txHash });
+      return ok(confirmed);
+    } catch (settlementError) {
+      // Settlement failed — refund balance and mark transaction FAILED
+      await prisma.$transaction([
+        prisma.agentWallet.update({
+          where: { agentId: input.fromAgentId },
+          data: { balanceUsdc: { increment: input.amountUsdc } },
+        }),
+        prisma.transaction.update({
+          where: { id: tx.id },
+          data: {
+            status: "FAILED",
+            failureReason: settlementError instanceof Error ? settlementError.message : "Settlement failed",
+          },
+        }),
+      ]);
+
+      return err("On-chain settlement failed — balance refunded", 502);
+    }
   } catch (e) { return handleError(e); }
 }

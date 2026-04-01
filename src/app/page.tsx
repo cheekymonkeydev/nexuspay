@@ -339,7 +339,7 @@ export default function LandingPage() {
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>NexusPay</span>
         </Link>
         <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
-          {["Features", "How It Works", "Pricing"].map((item) => (
+          {["Features", "How It Works", "Use Cases"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -567,97 +567,137 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ═══ PRICING ═══ */}
-      <Section id="pricing" style={{ paddingBottom: "var(--section-gap)" }}>
+      {/* ═══ USE CASES — Payment Flow Diagram ═══ */}
+      <Section id="use-cases" style={{ paddingBottom: "var(--section-gap)" }}>
         <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
-          <Badge variant="cyan">Pricing</Badge>
+          <Badge variant="cyan">Use Cases</Badge>
           <h2 style={{
             fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
             fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
           }}>
-            Simple, usage-based <GradientText>pricing</GradientText>
+            Three ways agents <GradientText>transact</GradientText>
           </h2>
+          <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 16, maxWidth: 560, margin: "12px auto 0" }}>
+            Every payment is policy-checked, balance-verified, and settled with full audit trail.
+          </p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, maxWidth: 960, margin: "0 auto" }}>
+        {/* Flow diagram */}
+        <div data-reveal data-reveal-delay="80" style={{
+          padding: 40, borderRadius: "var(--radius-xl)",
+          background: "rgba(139,92,246,0.03)",
+          border: "1px solid var(--border)",
+          marginBottom: 40,
+        }}>
+          {/* Central pipeline */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, flexWrap: "wrap" }}>
+            {/* Agent */}
+            <div style={{ textAlign: "center", minWidth: 100 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 16, margin: "0 auto 10px",
+                background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+              }}>🤖</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)" }}>AI Agent</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Initiates payment</div>
+            </div>
+
+            {/* Arrow */}
+            <svg width="60" height="24" viewBox="0 0 60 24" style={{ flexShrink: 0, margin: "0 4px" }}>
+              <defs><linearGradient id="arrow-g" x1="0" y1="12" x2="60" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#8b5cf6"/><stop offset="1" stopColor="#06b6d4"/></linearGradient></defs>
+              <path d="M0 12H52M46 6l8 6-8 6" stroke="url(#arrow-g)" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+
+            {/* NexusPay box */}
+            <div style={{
+              padding: "20px 28px", borderRadius: "var(--radius-lg)",
+              background: "rgba(9,9,15,0.8)", border: "1px solid rgba(139,92,246,0.2)",
+              textAlign: "center", minWidth: 200,
+            }}>
+              <NexusLogo size={28} />
+              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--font-display)", marginTop: 8, marginBottom: 12 }}>NexusPay</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {["Policy Check", "Balance Verify", "Settlement"].map((step, i) => (
+                  <div key={step} style={{
+                    padding: "5px 14px", borderRadius: 6,
+                    background: i === 2 ? "rgba(6,182,212,0.1)" : "rgba(139,92,246,0.08)",
+                    border: `1px solid ${i === 2 ? "rgba(6,182,212,0.15)" : "rgba(139,92,246,0.12)"}`,
+                    fontSize: 11, fontWeight: 600,
+                    color: i === 2 ? "var(--cyan-400)" : "var(--violet-300)",
+                    fontFamily: "var(--font-mono)",
+                  }}>{step}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <svg width="60" height="24" viewBox="0 0 60 24" style={{ flexShrink: 0, margin: "0 4px" }}>
+              <path d="M0 12H52M46 6l8 6-8 6" stroke="url(#arrow-g)" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+
+            {/* Recipient */}
+            <div style={{ textAlign: "center", minWidth: 100 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 16, margin: "0 auto 10px",
+                background: "rgba(6,182,212,0.12)", border: "1px solid rgba(6,182,212,0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+              }}>💰</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)" }}>Recipient</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Receives USDC</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Three payment types */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
           {[
             {
-              name: "Starter", price: "Free", desc: "For experimentation",
-              features: ["3 agent wallets", "100 tx/month", "Basic policies", "Testnet only", "Community support"],
-              cta: "Start Free", featured: false,
+              title: "On-Chain Settlement",
+              badge: "USDC on Base",
+              badgeVariant: "success" as const,
+              desc: "Agent pays an external address. USDC settles on Base via Coinbase CDP — real blockchain, sub-second finality, under $0.001 gas.",
+              flow: ["Agent calls /api/transactions", "Policies enforced (6 checks)", "Balance decremented atomically", "CDP settles USDC on-chain", "Tx hash returned to agent"],
             },
             {
-              name: "Growth", price: "$49", desc: "For production agents",
-              features: ["Unlimited wallets", "10,000 tx/month", "Advanced policies", "Mainnet + Testnet", "P2P + x402", "Priority support"],
-              cta: "Get Started", featured: true,
+              title: "P2P Agent Transfer",
+              badge: "Instant, Zero Gas",
+              badgeVariant: "violet" as const,
+              desc: "Agent pays another agent. Balances swap atomically in NexusPay — no on-chain settlement needed, no gas, instant confirmation.",
+              flow: ["Agent calls /api/p2p", "Policies enforced on sender", "Both balances updated atomically", "Transaction logged with audit trail", "Both agents notified"],
             },
             {
-              name: "Enterprise", price: "Custom", desc: "For fleet operators",
-              features: ["Unlimited everything", "Custom rate limits", "Dedicated support", "SLA guarantee", "Custom integrations", "Audit logs"],
-              cta: "Contact Sales", featured: false,
+              title: "x402 Pay-Per-Request",
+              badge: "Micropayments",
+              badgeVariant: "cyan" as const,
+              desc: "Agent hits a monetized API endpoint. Gets 402, auto-pays the sub-cent USDC fee, receives access. Enables true pay-per-call AI tool economics.",
+              flow: ["Agent hits protected endpoint", "Receives HTTP 402 + price", "Calls /api/x402 with payment", "Balance debited, access granted", "Endpoint revenue tracked"],
             },
-          ].map((plan, i) => (
+          ].map((uc, i) => (
             <div key={i} data-reveal data-reveal-delay={i * 100}>
-              <div style={{
-                padding: 32, borderRadius: "var(--radius-lg)",
-                border: plan.featured ? "1px solid rgba(139,92,246,0.3)" : "1px solid var(--border)",
-                background: plan.featured ? "rgba(139,92,246,0.04)" : "var(--gradient-surface)",
-                height: "100%",
-                display: "flex", flexDirection: "column",
-                position: "relative",
-              }}>
-                {plan.featured && (
-                  <div style={{
-                    position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)",
-                    padding: "4px 14px", borderRadius: "0 0 8px 8px",
-                    background: "var(--gradient-brand)",
-                    fontSize: 11, fontWeight: 700, color: "white", letterSpacing: "0.05em",
-                  }}>POPULAR</div>
-                )}
-                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{plan.name}</div>
-                <div style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16 }}>{plan.desc}</div>
-                <div style={{
-                  fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 800,
-                  letterSpacing: "-0.03em", marginBottom: 4,
-                }}>
-                  {plan.price}
-                  {plan.price !== "Free" && plan.price !== "Custom" && (
-                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-tertiary)" }}>/mo</span>
-                  )}
+              <GlassCard style={{ height: "100%" }}>
+                <div style={{ marginBottom: 14 }}>
+                  <Badge variant={uc.badgeVariant}>{uc.badge}</Badge>
                 </div>
-                <div style={{
-                  height: 1, background: "var(--border)", margin: "20px 0",
-                }} />
-                <ul style={{ flex: 1, listStyle: "none", display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
-                  {plan.features.map((f) => (
-                    <li key={f} style={{ fontSize: 14, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 10 }}>
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                        <path d="M11.5 3.5L5.5 10L2.5 7" stroke={plan.featured ? "#8b5cf6" : "#5E586B"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      {f}
-                    </li>
+                <h3 style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 10 }}>{uc.title}</h3>
+                <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 18 }}>{uc.desc}</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {uc.flow.map((step, j) => (
+                    <div key={j} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      fontSize: 12, color: "var(--text-secondary)",
+                    }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                        background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.12)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 10, fontWeight: 700, color: "var(--violet-400)",
+                        fontFamily: "var(--font-mono)",
+                      }}>{j + 1}</span>
+                      {step}
+                    </div>
                   ))}
-                </ul>
-                <button style={{
-                  width: "100%", padding: "12px 24px", borderRadius: 99,
-                  background: plan.featured ? "var(--gradient-brand)" : "transparent",
-                  border: plan.featured ? "none" : "1px solid var(--border-hover)",
-                  color: plan.featured ? "white" : "var(--text)",
-                  fontWeight: 600, fontSize: 14,
-                  transition: "transform 0.25s, box-shadow 0.25s, background 0.25s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  if (plan.featured) e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)";
-                  else e.currentTarget.style.background = "rgba(139,92,246,0.06)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                  if (!plan.featured) e.currentTarget.style.background = "transparent";
-                }}
-                >{plan.cta}</button>
-              </div>
+                </div>
+              </GlassCard>
             </div>
           ))}
         </div>

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { P2PTransferInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
+import { enforcePolicies } from "@/lib/policy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +21,15 @@ export async function POST(req: NextRequest) {
     if (!to) return err("Recipient wallet not found", 404);
     if (from.status !== "ACTIVE") return err("Sender wallet is suspended", 403);
     if (from.balanceUsdc < input.amountUsdc) return err("Insufficient balance", 400);
+
+    // Policy enforcement (no longer bypassed)
+    const policyResult = await enforcePolicies(input.fromAgentId, input.amountUsdc, {
+      category: "p2p",
+      toAddress: to.address,
+    });
+    if (!policyResult.passed) {
+      return err(policyResult.failureReason || "Policy check failed", 403);
+    }
 
     // Atomic transfer
     const [, , tx] = await prisma.$transaction([
@@ -40,6 +50,8 @@ export async function POST(req: NextRequest) {
           memo: input.memo,
           isP2P: true,
           status: "CONFIRMED",
+          category: "p2p",
+          policyChecks: policyResult.checks,
         },
       }),
     ]);
