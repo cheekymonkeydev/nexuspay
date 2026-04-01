@@ -2,117 +2,84 @@
 
 import { useEffect, useRef, useCallback } from "react";
 
-/* ─── NexusPay Logo ─── */
+/* ═══════════════════════════════════════════════════════
+   NexusPay Logo — Abstract N with payment flow arrow
+   ═══════════════════════════════════════════════════════ */
 export function NexusLogo({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-      <rect width="40" height="40" rx="10" fill="url(#lg)" />
-      {/* Left stroke */}
-      <path d="M12 30V10" stroke="#e8fdf0" strokeWidth="3" strokeLinecap="round" />
-      {/* Diagonal with arrow */}
-      <path d="M12 10L28 30" stroke="#34d87a" strokeWidth="3" strokeLinecap="round" />
-      {/* Right stroke */}
-      <path d="M28 10V30" stroke="#e8fdf0" strokeWidth="3" strokeLinecap="round" />
-      {/* Arrow head on diagonal */}
-      <path d="M24 25L28 30L23 28" stroke="#34d87a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Source node dot */}
-      <circle cx="12" cy="10" r="2.5" fill="#1ec464" />
       <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="40" y2="40">
-          <stop stopColor="#0a1f14" />
-          <stop offset="1" stopColor="#054d23" />
+        <linearGradient id="nexus-grad" x1="0" y1="0" x2="40" y2="40">
+          <stop offset="0%" stopColor="#8b5cf6" />
+          <stop offset="100%" stopColor="#06b6d4" />
+        </linearGradient>
+        <linearGradient id="nexus-bg" x1="0" y1="0" x2="40" y2="40">
+          <stop offset="0%" stopColor="#1a1a28" />
+          <stop offset="100%" stopColor="#13131d" />
         </linearGradient>
       </defs>
+      <rect width="40" height="40" rx="11" fill="url(#nexus-bg)" stroke="url(#nexus-grad)" strokeWidth="1" strokeOpacity="0.3" />
+      <path d="M12 29V11" stroke="#F0EDE8" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M12 11L28 29" stroke="url(#nexus-grad)" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M28 11V29" stroke="#F0EDE8" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M24.5 24.5L28 29L23.5 27" stroke="url(#nexus-grad)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="11" r="2" fill="#8b5cf6" />
+      <circle cx="28" cy="29" r="2" fill="#06b6d4" />
     </svg>
   );
 }
 
-/* ─── Hex Grid Background ─── */
-export function HexGrid({ opacity = 0.35 }: { opacity?: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let raf: number;
-    let t = 0;
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const drawHex = (cx: number, cy: number, r: number, alpha: number) => {
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = (Math.PI / 3) * i - Math.PI / 6;
-        const x = cx + r * Math.cos(angle);
-        const y = cy + r * Math.sin(angle);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.strokeStyle = `rgba(52, 216, 122, ${alpha})`;
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    };
-
-    const animate = () => {
-      t += 0.003;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const size = 40;
-      const h = size * Math.sqrt(3);
-
-      // Two glow spots
-      const g1x = canvas.width * (0.3 + 0.2 * Math.sin(t * 0.7));
-      const g1y = canvas.height * (0.4 + 0.2 * Math.cos(t * 0.5));
-      const g2x = canvas.width * (0.7 + 0.15 * Math.cos(t * 0.6));
-      const g2y = canvas.height * (0.6 + 0.2 * Math.sin(t * 0.4));
-
-      for (let row = -1; row < canvas.height / h + 1; row++) {
-        for (let col = -1; col < canvas.width / (size * 1.5) + 1; col++) {
-          const cx = col * size * 1.5;
-          const cy = row * h + (col % 2 ? h / 2 : 0);
-          const d1 = Math.hypot(cx - g1x, cy - g1y);
-          const d2 = Math.hypot(cx - g2x, cy - g2y);
-          const glow1 = Math.max(0, 1 - d1 / 350);
-          const glow2 = Math.max(0, 1 - d2 / 300);
-          const alpha = 0.025 + glow1 * 0.06 + glow2 * 0.05;
-          drawHex(cx, cy, size, alpha);
-        }
-      }
-      raf = requestAnimationFrame(animate);
-    };
-    animate();
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-    };
-  }, []);
-
+/* ═══════════════════════════════════════════════════════
+   Ambient Glow Orbs — Floating gradient blobs
+   ═══════════════════════════════════════════════════════ */
+export function AmbientGlow() {
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: "fixed", inset: 0, zIndex: 0,
-        opacity, pointerEvents: "none",
-      }}
-    />
+    <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" }}>
+      {/* Violet orb — top left */}
+      <div style={{
+        position: "absolute", top: "-20%", left: "-10%",
+        width: "60vw", height: "60vw", maxWidth: 900, maxHeight: 900,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(124,58,237,0.07) 0%, transparent 70%)",
+        animation: "float-1 25s ease-in-out infinite",
+      }} />
+      {/* Cyan orb — bottom right */}
+      <div style={{
+        position: "absolute", bottom: "-30%", right: "-15%",
+        width: "55vw", height: "55vw", maxWidth: 800, maxHeight: 800,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 70%)",
+        animation: "float-2 30s ease-in-out infinite",
+      }} />
+      {/* Small accent orb — mid */}
+      <div style={{
+        position: "absolute", top: "40%", right: "20%",
+        width: "30vw", height: "30vw", maxWidth: 500, maxHeight: 500,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(139,92,246,0.04) 0%, transparent 70%)",
+        animation: "float-3 20s ease-in-out infinite",
+      }} />
+      <style>{`
+        @keyframes float-1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(5vw, 8vh); } }
+        @keyframes float-2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-6vw, -5vh); } }
+        @keyframes float-3 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(3vw, -6vh); } }
+      `}</style>
+    </div>
   );
 }
 
-/* ─── Interactive Particle Network ─── */
-export function ParticleNetwork() {
+/* ═══════════════════════════════════════════════════════
+   Constellation Network — Interactive particle canvas
+   ═══════════════════════════════════════════════════════ */
+export function ConstellationNetwork({ height = "100vh" }: { height?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mouseRef = useRef({ x: -1000, y: -1000 });
+  const mouseRef = useRef({ x: -9999, y: -9999 });
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    mouseRef.current = { x: e.clientX, y: e.clientY };
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
 
   useEffect(() => {
@@ -121,135 +88,145 @@ export function ParticleNetwork() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    window.addEventListener("mousemove", handleMouseMove);
-
     let raf: number;
-    const particles: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
-    const count = 80;
+    const nodes: { x: number; y: number; vx: number; vy: number; r: number; baseAlpha: number }[] = [];
+    const count = 60;
 
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
+    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
     resize();
     window.addEventListener("resize", resize);
+    window.addEventListener("mousemove", onMouseMove);
 
     for (let i = 0; i < count; i++) {
-      particles.push({
-        x: Math.random() * window.innerWidth,
-        y: Math.random() * window.innerHeight,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
-        r: Math.random() * 2 + 1,
+      nodes.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        r: Math.random() * 1.8 + 0.6,
+        baseAlpha: Math.random() * 0.3 + 0.15,
       });
     }
 
-    const animate = () => {
+    const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const { x: mx, y: my } = mouseRef.current;
+      const mx = mouseRef.current.x, my = mouseRef.current.y;
 
-      for (const p of particles) {
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+      // Update + draw nodes
+      for (const n of nodes) {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > canvas.width) n.vx *= -1;
+        if (n.y < 0 || n.y > canvas.height) n.vy *= -1;
 
-        // Attract to cursor
-        const dm = Math.hypot(p.x - mx, p.y - my);
-        if (dm < 200) {
-          p.vx += (mx - p.x) * 0.00008;
-          p.vy += (my - p.y) * 0.00008;
+        const dm = Math.hypot(n.x - mx, n.y - my);
+        const proximity = Math.max(0, 1 - dm / 220);
+
+        // Gentle attraction
+        if (dm < 250 && dm > 5) {
+          n.vx += (mx - n.x) * 0.00004;
+          n.vy += (my - n.y) * 0.00004;
         }
 
+        // Speed damping
+        const speed = Math.hypot(n.vx, n.vy);
+        if (speed > 0.6) { n.vx *= 0.98; n.vy *= 0.98; }
+
+        const alpha = n.baseAlpha + proximity * 0.5;
+        const isViolet = n.baseAlpha > 0.25;
+        const color = isViolet
+          ? `rgba(139, 92, 246, ${alpha})`
+          : `rgba(6, 182, 212, ${alpha})`;
+
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(52, 216, 122, ${0.3 + (dm < 200 ? 0.4 * (1 - dm / 200) : 0)})`;
+        ctx.arc(n.x, n.y, n.r + proximity * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
         ctx.fill();
       }
 
-      // Connections
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const d = Math.hypot(particles[i].x - particles[j].x, particles[i].y - particles[j].y);
-          if (d < 120) {
+      // Edges
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+          if (d < 140) {
+            const midDm = Math.hypot((nodes[i].x + nodes[j].x) / 2 - mx, (nodes[i].y + nodes[j].y) / 2 - my);
+            const cursorBoost = Math.max(0, 1 - midDm / 200) * 0.12;
             ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(52, 216, 122, ${0.08 * (1 - d / 120)})`;
-            ctx.lineWidth = 0.5;
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(139, 92, 246, ${0.04 * (1 - d / 140) + cursorBoost})`;
+            ctx.lineWidth = 0.6;
             ctx.stroke();
           }
         }
       }
 
       // Cursor glow
-      if (mx > 0) {
-        const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 180);
-        grad.addColorStop(0, "rgba(30, 196, 100, 0.08)");
-        grad.addColorStop(1, "rgba(30, 196, 100, 0)");
-        ctx.fillStyle = grad;
-        ctx.fillRect(mx - 180, my - 180, 360, 360);
+      if (mx > 0 && my > 0) {
+        const g = ctx.createRadialGradient(mx, my, 0, mx, my, 160);
+        g.addColorStop(0, "rgba(124, 58, 237, 0.06)");
+        g.addColorStop(0.5, "rgba(6, 182, 212, 0.02)");
+        g.addColorStop(1, "transparent");
+        ctx.fillStyle = g;
+        ctx.fillRect(mx - 160, my - 160, 320, 320);
       }
 
-      raf = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(draw);
     };
-    animate();
+    draw();
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mousemove", onMouseMove);
     };
-  }, [handleMouseMove]);
+  }, [onMouseMove]);
 
   return (
     <canvas
       ref={canvasRef}
-      style={{
-        position: "absolute", inset: 0, zIndex: 1,
-        pointerEvents: "none",
-      }}
+      style={{ position: "absolute", inset: 0, width: "100%", height, zIndex: 1, pointerEvents: "none" }}
     />
   );
 }
 
-/* ─── Glass Card with cursor-tracking glow ─── */
+/* ═══════════════════════════════════════════════════════
+   GlassCard — Frosted card with gradient border glow
+   ═══════════════════════════════════════════════════════ */
 export function GlassCard({
-  children, className = "", style = {},
+  children, className = "", style = {}, glow = true,
 }: {
-  children: React.ReactNode; className?: string; style?: React.CSSProperties;
+  children: React.ReactNode; className?: string; style?: React.CSSProperties; glow?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-
-  const handleMove = useCallback((e: React.MouseEvent) => {
-    const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    el.style.setProperty("--gx", `${e.clientX - rect.left}px`);
-    el.style.setProperty("--gy", `${e.clientY - rect.top}px`);
-  }, []);
 
   return (
     <div
       ref={ref}
-      onMouseMove={handleMove}
       className={className}
+      onMouseMove={(e) => {
+        const el = ref.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        el.style.setProperty("--my", `${e.clientY - r.top}px`);
+      }}
       style={{
-        background: "var(--bg-card)",
-        backdropFilter: "blur(12px)",
-        border: "1px solid var(--border)",
-        borderRadius: 16,
-        padding: 24,
         position: "relative",
+        background: "var(--bg-card)",
+        backdropFilter: "blur(20px) saturate(1.2)",
+        WebkitBackdropFilter: "blur(20px) saturate(1.2)",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--border)",
+        padding: 28,
         overflow: "hidden",
-        transition: "border-color 0.3s, transform 0.3s, box-shadow 0.3s",
+        transition: "border-color 0.4s ease, transform 0.4s ease, box-shadow 0.4s ease",
         ...style,
       }}
       onMouseEnter={(e) => {
         const el = e.currentTarget;
         el.style.borderColor = "var(--border-hover)";
-        el.style.transform = "translateY(-2px)";
-        el.style.boxShadow = "0 8px 32px var(--glow)";
+        el.style.transform = "translateY(-3px)";
+        if (glow) el.style.boxShadow = "0 12px 40px var(--glow-violet)";
       }}
       onMouseLeave={(e) => {
         const el = e.currentTarget;
@@ -258,27 +235,97 @@ export function GlassCard({
         el.style.boxShadow = "none";
       }}
     >
-      {/* Cursor glow */}
+      {/* Cursor-tracking radial highlight */}
       <div style={{
-        position: "absolute",
-        width: 200, height: 200,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(52,216,122,0.1) 0%, transparent 70%)",
+        position: "absolute", width: 280, height: 280, borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)",
+        left: "var(--mx, -200px)", top: "var(--my, -200px)",
         transform: "translate(-50%, -50%)",
-        left: "var(--gx, -100px)",
-        top: "var(--gy, -100px)",
-        pointerEvents: "none",
-        transition: "opacity 0.2s",
+        pointerEvents: "none", transition: "opacity 0.3s",
       }} />
       <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </div>
   );
 }
 
-/* ─── Scroll reveal hook ─── */
+/* ═══════════════════════════════════════════════════════
+   Section Container
+   ═══════════════════════════════════════════════════════ */
+export function Section({
+  children, id, style = {},
+}: {
+  children: React.ReactNode; id?: string; style?: React.CSSProperties;
+}) {
+  return (
+    <section
+      id={id}
+      style={{
+        position: "relative", zIndex: 2,
+        maxWidth: "var(--container-max)",
+        margin: "0 auto",
+        padding: `0 var(--container-padding)`,
+        ...style,
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Gradient Text
+   ═══════════════════════════════════════════════════════ */
+export function GradientText({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <span style={{
+      background: "var(--gradient-brand)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text",
+      ...style,
+    }}>
+      {children}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Badge / Pill
+   ═══════════════════════════════════════════════════════ */
+export function Badge({
+  children, variant = "default",
+}: {
+  children: React.ReactNode;
+  variant?: "default" | "success" | "warning" | "danger" | "violet" | "cyan";
+}) {
+  const colors: Record<string, { bg: string; text: string }> = {
+    default: { bg: "rgba(255,255,255,0.05)", text: "var(--text-secondary)" },
+    success: { bg: "rgba(52,211,153,0.12)", text: "#34d399" },
+    warning: { bg: "rgba(251,191,36,0.12)", text: "#fbbf24" },
+    danger:  { bg: "rgba(248,113,113,0.12)", text: "#f87171" },
+    violet:  { bg: "rgba(139,92,246,0.12)", text: "#a78bfa" },
+    cyan:    { bg: "rgba(6,182,212,0.12)", text: "#22d3ee" },
+  };
+  const c = colors[variant] || colors.default;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      padding: "4px 12px", borderRadius: 99,
+      background: c.bg, color: c.text,
+      fontSize: 12, fontWeight: 600, letterSpacing: "0.02em",
+    }}>
+      {children}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Scroll reveal hook
+   ═══════════════════════════════════════════════════════ */
 export function useScrollReveal() {
   useEffect(() => {
-    const els = document.querySelectorAll("[data-reveal]");
+    const selectors = "[data-reveal],[data-reveal-left]";
+    const els = document.querySelectorAll(selectors);
     const obs = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -291,7 +338,7 @@ export function useScrollReveal() {
           }
         });
       },
-      { threshold: 0.1 }
+      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
     );
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();

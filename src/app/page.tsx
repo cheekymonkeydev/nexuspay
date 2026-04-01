@@ -1,427 +1,755 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { NexusLogo, HexGrid, ParticleNetwork, GlassCard, useScrollReveal } from "@/components/shared";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import {
+  NexusLogo, AmbientGlow, ConstellationNetwork,
+  GlassCard, Section, GradientText, Badge, useScrollReveal,
+} from "@/components/shared";
 
-/* ─── Animated counter ─── */
-function Counter({ end, suffix = "", prefix = "" }: { end: number; suffix?: string; prefix?: string }) {
+/* ═══════════════════════════════════════════════════════
+   Animated counter — counts up on scroll
+   ═══════════════════════════════════════════════════════ */
+function Counter({ end, suffix = "", prefix = "", decimals = 0 }: {
+  end: number; suffix?: string; prefix?: string; decimals?: number;
+}) {
   const [val, setVal] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
+  const started = useRef(false);
 
   useEffect(() => {
     const obs = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
+      if (entry.isIntersecting && !started.current) {
+        started.current = true;
         let start = 0;
-        const duration = 2000;
+        const duration = 2200;
         const step = (ts: number) => {
           if (!start) start = ts;
           const p = Math.min((ts - start) / duration, 1);
-          const ease = 1 - Math.pow(1 - p, 3);
-          setVal(Math.round(ease * end));
+          const ease = 1 - Math.pow(1 - p, 4);
+          setVal(Number((ease * end).toFixed(decimals)));
           if (p < 1) requestAnimationFrame(step);
         };
         requestAnimationFrame(step);
-        obs.disconnect();
       }
     }, { threshold: 0.5 });
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
-  }, [end]);
+  }, [end, decimals]);
 
-  return <span ref={ref}>{prefix}{val.toLocaleString()}{suffix}</span>;
+  return <span ref={ref}>{prefix}{val.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</span>;
 }
 
-/* ─── Typing code demo ─── */
-const codeSnippets = {
-  "Create Wallet": `// Create an agent wallet
-const wallet = await fetch("/api/wallets", {
-  method: "POST",
-  body: JSON.stringify({
-    agentId: "agent-alpha",
-    initialFunding: 50
-  })
+/* ═══════════════════════════════════════════════════════
+   Code demo — tabbed with typewriter
+   ═══════════════════════════════════════════════════════ */
+const codeExamples: Record<string, { lang: string; code: string }> = {
+  "Create Wallet": {
+    lang: "typescript",
+    code: `const wallet = await nexus.wallets.create({
+  agentId: "agent-alpha",
+  initialFunding: 50.00
 });
-// → { address: "0x7a3...", balanceUsdc: 50 }`,
-  "Send USDC": `// Policy-enforced USDC transfer
-const tx = await fetch("/api/transactions", {
-  method: "POST",
-  body: JSON.stringify({
-    fromAgentId: "agent-alpha",
-    toAddress: "0x9b2...",
-    amountUsdc: 12.50,
-    category: "compute"
-  })
+
+console.log(wallet.address);
+// → 0x7a3f...8b2c
+console.log(wallet.balanceUsdc);
+// → 50.00`,
+  },
+  "Send Payment": {
+    lang: "typescript",
+    code: `const tx = await nexus.transactions.send({
+  fromAgentId: "agent-alpha",
+  toAddress: "0x9b2e...4d1a",
+  amountUsdc: 12.50,
+  category: "compute"
 });
-// → { status: "CONFIRMED", txHash: "0x..." }`,
-  "P2P Transfer": `// Agent-to-agent instant transfer
-const p2p = await fetch("/api/p2p", {
-  method: "POST",
-  body: JSON.stringify({
-    fromAgentId: "agent-alpha",
-    toAgentId: "agent-beta",
-    amountUsdc: 5.00,
-    memo: "API tool payment"
-  })
+
+// Policy-checked, on-chain settled
+console.log(tx.status);  // → "CONFIRMED"
+console.log(tx.txHash);  // → "0x8f2a..."`,
+  },
+  "P2P Transfer": {
+    lang: "typescript",
+    code: `const p2p = await nexus.p2p.transfer({
+  fromAgentId: "agent-alpha",
+  toAgentId: "agent-beta",
+  amountUsdc: 5.00,
+  memo: "Tool access fee"
 });
-// → { isP2P: true, status: "CONFIRMED" }`,
-  "x402 Paywall": `// Register a monetized endpoint
-await fetch("/api/x402", {
-  method: "POST",
-  body: JSON.stringify({
-    path: "/api/premium/data",
-    priceUsdc: 0.001
-  })
+
+// Instant, zero gas
+console.log(p2p.isP2P);   // → true
+console.log(p2p.status);  // → "CONFIRMED"`,
+  },
+  "x402 Paywall": {
+    lang: "typescript",
+    code: `// Register a pay-per-request endpoint
+await nexus.x402.register({
+  path: "/api/premium/inference",
+  priceUsdc: 0.001,
+  description: "ML inference endpoint"
 });
-// Agents pay per request — HTTP 402 flow`,
+
+// Agents auto-pay on 402 response
+// Sub-cent micropayments on Base`,
+  },
 };
 
 function CodeDemo() {
-  const tabs = Object.keys(codeSnippets) as (keyof typeof codeSnippets)[];
-  const [active, setActive] = useState<keyof typeof codeSnippets>(tabs[0]);
+  const tabs = Object.keys(codeExamples);
+  const [active, setActive] = useState(tabs[0]);
   const [displayed, setDisplayed] = useState("");
   const [cursor, setCursor] = useState(true);
 
   useEffect(() => {
-    const code = codeSnippets[active];
+    const code = codeExamples[active].code;
     setDisplayed("");
     let i = 0;
     const id = setInterval(() => {
-      if (i < code.length) {
-        setDisplayed(code.slice(0, i + 1));
-        i++;
-      } else clearInterval(id);
-    }, 12);
+      if (i < code.length) { setDisplayed(code.slice(0, i + 1)); i++; }
+      else clearInterval(id);
+    }, 14);
     return () => clearInterval(id);
   }, [active]);
 
   useEffect(() => {
-    const id = setInterval(() => setCursor((c) => !c), 530);
+    const id = setInterval(() => setCursor((c) => !c), 500);
     return () => clearInterval(id);
   }, []);
 
   return (
-    <div style={{ background: "rgba(5,15,10,0.8)", borderRadius: 16, border: "1px solid var(--border)", overflow: "hidden" }}>
-      <div style={{ display: "flex", borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
+    <div style={{
+      borderRadius: "var(--radius-lg)",
+      border: "1px solid var(--border)",
+      background: "rgba(9,9,15,0.9)",
+      overflow: "hidden",
+      backdropFilter: "blur(20px)",
+    }}>
+      {/* Tab bar */}
+      <div style={{
+        display: "flex", borderBottom: "1px solid var(--border-subtle)",
+        background: "rgba(15,15,24,0.6)",
+      }}>
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActive(tab)}
             style={{
-              padding: "12px 16px",
-              background: "none",
-              border: "none",
-              color: active === tab ? "var(--green-300)" : "var(--text-muted)",
-              borderBottom: active === tab ? "2px solid var(--green-400)" : "2px solid transparent",
-              fontSize: 13,
-              fontWeight: 500,
-              transition: "all 0.2s",
+              padding: "14px 20px", fontSize: 13, fontWeight: 500,
+              color: active === tab ? "var(--violet-300)" : "var(--text-tertiary)",
+              borderBottom: active === tab ? "2px solid var(--violet-500)" : "2px solid transparent",
+              transition: "all 0.25s ease",
             }}
           >
             {tab}
           </button>
         ))}
       </div>
-      <pre style={{
-        padding: 24,
-        fontFamily: "var(--mono)",
-        fontSize: 13,
-        lineHeight: 1.7,
-        color: "var(--green-200)",
-        minHeight: 260,
-        margin: 0,
-        overflowX: "auto",
-      }}>
-        {displayed}
-        <span style={{ opacity: cursor ? 1 : 0, color: "var(--green-400)" }}>|</span>
-      </pre>
+      {/* Code */}
+      <div style={{ position: "relative" }}>
+        {/* Line numbers */}
+        <pre style={{
+          padding: "24px 0 24px 20px",
+          fontFamily: "var(--font-mono)", fontSize: 13, lineHeight: 1.8,
+          color: "var(--text-tertiary)", opacity: 0.4,
+          position: "absolute", top: 0, left: 0,
+          userSelect: "none",
+        }}>
+          {displayed.split("\n").map((_, i) => (
+            <div key={i}>{String(i + 1).padStart(2, " ")}</div>
+          ))}
+        </pre>
+        <pre style={{
+          padding: "24px 24px 24px 56px",
+          fontFamily: "var(--font-mono)", fontSize: 13, lineHeight: 1.8,
+          color: "var(--violet-200)", minHeight: 260, margin: 0,
+          overflowX: "auto",
+        }}>
+          {displayed}
+          <span style={{ opacity: cursor ? 0.8 : 0, color: "var(--cyan-400)", transition: "opacity 0.1s" }}>▊</span>
+        </pre>
+      </div>
     </div>
   );
 }
 
-/* ─── Features data ─── */
+/* ═══════════════════════════════════════════════════════
+   FAQ Accordion
+   ═══════════════════════════════════════════════════════ */
+function FAQ() {
+  const [open, setOpen] = useState<number | null>(null);
+  const items = [
+    { q: "What chains does NexusPay support?", a: "NexusPay settles on Base (Coinbase L2) using USDC. Base offers sub-second finality and gas costs under $0.001 per transaction, making it ideal for agent micropayments." },
+    { q: "How do spending policies work?", a: "Each agent wallet can have multiple policies defining per-transaction limits, daily caps, allowed recipient lists, blocked merchant categories, and approval gates. Every transaction is validated against active policies before settlement." },
+    { q: "What is the x402 protocol?", a: "x402 implements HTTP 402 Payment Required for machine-to-machine payments. Register an API endpoint with a USDC price — when agents hit it without payment, they receive a 402 response, pay via NexusPay, and gain access. Sub-cent micropayments make this viable for every API call." },
+    { q: "Are agent wallets custodial?", a: "Agent wallets are created via the Coinbase CDP SDK, which provides institutional-grade key management. The CDP handles signing and key storage — your agents never touch private keys directly." },
+    { q: "How do P2P transfers work?", a: "Agent-to-agent transfers are instant balance swaps within NexusPay — no gas, no on-chain settlement needed. Both balances update atomically in a single database transaction, with full audit trail." },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {items.map((item, i) => (
+        <div
+          key={i}
+          style={{
+            borderRadius: "var(--radius-md)",
+            border: "1px solid",
+            borderColor: open === i ? "var(--border-hover)" : "var(--border)",
+            background: open === i ? "rgba(139,92,246,0.03)" : "transparent",
+            overflow: "hidden",
+            transition: "all 0.3s ease",
+          }}
+        >
+          <button
+            onClick={() => setOpen(open === i ? null : i)}
+            style={{
+              width: "100%", textAlign: "left",
+              padding: "18px 24px",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              color: open === i ? "var(--text)" : "var(--text-secondary)",
+              fontSize: 15, fontWeight: 500,
+              transition: "color 0.2s",
+            }}
+          >
+            {item.q}
+            <span style={{
+              fontSize: 18, transition: "transform 0.3s ease",
+              transform: open === i ? "rotate(45deg)" : "rotate(0deg)",
+              color: "var(--violet-400)", flexShrink: 0, marginLeft: 16,
+            }}>+</span>
+          </button>
+          <div style={{
+            maxHeight: open === i ? 200 : 0,
+            opacity: open === i ? 1 : 0,
+            overflow: "hidden",
+            transition: "max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease",
+          }}>
+            <p style={{
+              padding: "0 24px 20px",
+              fontSize: 14, lineHeight: 1.7,
+              color: "var(--text-secondary)",
+            }}>{item.a}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Feature data
+   ═══════════════════════════════════════════════════════ */
 const features = [
-  { icon: "🔗", title: "x402 Protocol", desc: "HTTP 402 Payment Required. Agents pay-per-request to access monetized API endpoints with sub-cent USDC micropayments." },
-  { icon: "🤝", title: "P2P Agent Payments", desc: "Agents pay agents directly. Instant off-chain settlement between NexusPay wallets with atomic balance transfers." },
-  { icon: "🛡️", title: "Smart Spending Policies", desc: "Per-transaction limits, daily caps, merchant blocklists, category allowlists, and approval gates — all enforced before settlement." },
-  { icon: "💸", title: "Micropayments", desc: "Sub-cent USDC transactions on Base. Gas costs fractions of a penny, enabling true pay-per-call economics for AI tools." },
-  { icon: "🔑", title: "DID Credentials", desc: "Issue and verify decentralized identity credentials. JWT-signed DIDs let merchants authenticate agents cryptographically." },
-  { icon: "🧰", title: "MCP Tool Monetization", desc: "Gate MCP tool calls behind NexusPay. Tool providers earn per-invocation; agents pay from their managed wallets." },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#feat-g)" strokeWidth="1.5" strokeLinecap="round">
+        <defs><linearGradient id="feat-g" x1="0" y1="0" x2="24" y2="24"><stop stopColor="#8b5cf6"/><stop offset="1" stopColor="#06b6d4"/></linearGradient></defs>
+        <rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 12h6M12 9v6"/>
+      </svg>
+    ),
+    title: "Agent Wallets",
+    desc: "CDP-backed USDC wallets created in one API call. Funded from treasury, non-custodial key management via Coinbase.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#feat-g)" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    ),
+    title: "Spending Policies",
+    desc: "Per-tx limits, daily caps, merchant blocklists, category allowlists, and multi-sig approval gates — enforced before every settlement.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#feat-g)" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
+      </svg>
+    ),
+    title: "P2P Transfers",
+    desc: "Agent-to-agent instant payments. Zero gas, atomic balance swaps, full audit trail. Agents pay each other for tool access and services.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#feat-g)" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+      </svg>
+    ),
+    title: "x402 Protocol",
+    desc: "HTTP 402 pay-per-request. Register endpoints with USDC prices — agents auto-pay on 402. Sub-cent micropayments on Base.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#feat-g)" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/>
+      </svg>
+    ),
+    title: "DID Credentials",
+    desc: "Issue verifiable credentials with JWT-signed DIDs. Merchants authenticate agents cryptographically before accepting payment.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#feat-g)" strokeWidth="1.5" strokeLinecap="round">
+        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/><circle cx="12" cy="15" r="1"/>
+      </svg>
+    ),
+    title: "MCP Monetization",
+    desc: "Gate MCP tool calls behind NexusPay. Providers earn per-invocation; agents pay from managed wallets with policy enforcement.",
+  },
 ];
 
-/* ─── How It Works ─── */
 const steps = [
-  { num: "01", title: "Register Agent", desc: "Create a wallet for your AI agent with a single API call. Funded from treasury with USDC on Base." },
-  { num: "02", title: "Set Policies", desc: "Define spending rules — limits, allowlists, categories, approval gates. Policies are enforced on every transaction." },
-  { num: "03", title: "Issue Credentials", desc: "Generate DID-based identity credentials. Merchants verify agents cryptographically before accepting payment." },
-  { num: "04", title: "Transact", desc: "Send USDC to external addresses, other agents (P2P), or pay for API access via x402 — all policy-enforced." },
-  { num: "05", title: "Settle On-Chain", desc: "Transactions settle on Base via Coinbase CDP SDK. Real USDC, real blockchain, sub-second finality." },
-  { num: "06", title: "Monitor", desc: "Dashboard shows balances, transaction history, policy violations, and real-time analytics across all agents." },
+  { num: "01", title: "Register Agent", desc: "Single API call creates a CDP-backed wallet funded with USDC on Base." },
+  { num: "02", title: "Set Policies", desc: "Define spending limits, allowlists, blocklists, and approval workflows." },
+  { num: "03", title: "Issue Identity", desc: "Generate DID credentials for cryptographic merchant authentication." },
+  { num: "04", title: "Transact", desc: "Send USDC, transfer P2P, or pay-per-request via x402 — all policy-enforced." },
 ];
 
+/* ═══════════════════════════════════════════════════════
+   MAIN PAGE
+   ═══════════════════════════════════════════════════════ */
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [email, setEmail] = useState("");
   useScrollReveal();
 
   useEffect(() => {
-    const h = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", h);
+    const h = () => setScrolled(window.scrollY > 60);
+    window.addEventListener("scroll", h, { passive: true });
     return () => window.removeEventListener("scroll", h);
   }, []);
 
   return (
     <div style={{ minHeight: "100vh", position: "relative" }}>
-      <HexGrid opacity={0.3} />
+      <AmbientGlow />
 
-      {/* ── Nav ── */}
+      {/* ═══ NAVIGATION ═══ */}
       <nav style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        padding: "16px 32px",
+        padding: scrolled ? "12px 32px" : "20px 32px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        background: scrolled ? "rgba(5, 10, 8, 0.85)" : "transparent",
-        backdropFilter: scrolled ? "blur(16px)" : "none",
-        borderBottom: scrolled ? "1px solid var(--border)" : "none",
-        transition: "all 0.3s",
+        background: scrolled ? "rgba(9, 9, 15, 0.8)" : "transparent",
+        backdropFilter: scrolled ? "blur(20px) saturate(1.3)" : "none",
+        WebkitBackdropFilter: scrolled ? "blur(20px) saturate(1.3)" : "none",
+        borderBottom: scrolled ? "1px solid var(--border-subtle)" : "none",
+        transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <NexusLogo size={36} />
-          <span style={{ fontWeight: 700, fontSize: 18 }}>NexusPay</span>
-        </div>
-        <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
-          <a href="#features" style={{ fontSize: 14, color: "var(--text-muted)", transition: "color 0.2s" }}
-             onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-             onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}>Features</a>
-          <a href="#how-it-works" style={{ fontSize: 14, color: "var(--text-muted)", transition: "color 0.2s" }}
-             onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-             onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}>How It Works</a>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <NexusLogo size={34} />
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>NexusPay</span>
+        </Link>
+        <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
+          {["Features", "How It Works", "Pricing"].map((item) => (
+            <a
+              key={item}
+              href={`#${item.toLowerCase().replace(/ /g, "-")}`}
+              style={{
+                fontSize: 13, fontWeight: 500,
+                color: "var(--text-secondary)",
+                transition: "color 0.2s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+            >{item}</a>
+          ))}
           <Link href="/dashboard" style={{
-            padding: "8px 20px",
-            borderRadius: 8,
-            background: "linear-gradient(135deg, var(--green-600), var(--green-500))",
-            color: "white",
-            fontSize: 14,
-            fontWeight: 600,
-            transition: "transform 0.2s, box-shadow 0.2s",
+            padding: "9px 22px", borderRadius: 99,
+            background: "var(--gradient-brand)",
+            color: "white", fontSize: 13, fontWeight: 600,
+            transition: "transform 0.25s ease, box-shadow 0.25s ease",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 20px var(--glow)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
           >Dashboard</Link>
         </div>
       </nav>
 
-      {/* ── Hero ── */}
+      {/* ═══ HERO ═══ */}
       <section style={{
         position: "relative", minHeight: "100vh",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        textAlign: "center", padding: "120px 24px 80px",
+        textAlign: "center", padding: "140px 24px 100px",
+        overflow: "hidden",
       }}>
-        <ParticleNetwork />
-        <div style={{ position: "relative", zIndex: 2, maxWidth: 800 }}>
-          <div style={{
-            display: "inline-block", padding: "6px 16px", borderRadius: 20,
-            background: "rgba(52,216,122,0.1)", border: "1px solid var(--border)",
-            fontSize: 13, color: "var(--green-300)", marginBottom: 24,
+        <ConstellationNetwork />
+
+        <div style={{ position: "relative", zIndex: 2, maxWidth: 780 }}>
+          {/* Tag */}
+          <div data-reveal style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "7px 18px", borderRadius: 99,
+            background: "rgba(139,92,246,0.08)",
+            border: "1px solid rgba(139,92,246,0.15)",
+            fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
+            color: "var(--violet-300)", marginBottom: 28,
           }}>
-            USDC on Base &middot; x402 Protocol &middot; Agent-to-Agent
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-400)" }} />
+            USDC ON BASE &middot; LIVE ON TESTNET
           </div>
-          <h1 style={{ fontSize: "clamp(40px, 6vw, 72px)", fontWeight: 900, lineHeight: 1.05, marginBottom: 24 }}>
-            PayPal for<br />
-            <span style={{ background: "linear-gradient(135deg, var(--green-300), var(--green-500))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              AI Agents
-            </span>
+
+          <h1 data-reveal data-reveal-delay="80" style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "clamp(42px, 6.5vw, 76px)",
+            fontWeight: 800, lineHeight: 1.04,
+            letterSpacing: "-0.035em",
+            marginBottom: 24,
+          }}>
+            The payment layer<br />for{" "}
+            <GradientText>AI agents</GradientText>
           </h1>
-          <p style={{ fontSize: 18, color: "var(--text-muted)", lineHeight: 1.7, maxWidth: 600, margin: "0 auto 40px" }}>
-            Give your AI agents managed wallets, spending policies, and real USDC settlement on Base.
-            P2P transfers, micropayments, x402 paywalls — all through a simple REST API.
-          </p>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/dashboard" style={{
-              padding: "14px 32px", borderRadius: 10,
-              background: "linear-gradient(135deg, var(--green-500), var(--green-400))",
-              color: "var(--bg)", fontWeight: 700, fontSize: 16,
-              transition: "transform 0.2s, box-shadow 0.2s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 32px var(--glow)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-            >Open Dashboard</Link>
-            <a href="#code-demo" style={{
-              padding: "14px 32px", borderRadius: 10,
-              border: "1px solid var(--border)", color: "var(--text)",
-              fontWeight: 600, fontSize: 16,
-              transition: "border-color 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--border-hover)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-            >See the API</a>
-          </div>
-        </div>
-      </section>
 
-      {/* ── Stats ── */}
-      <section style={{
-        position: "relative", zIndex: 2, padding: "0 24px 80px",
-        display: "flex", justifyContent: "center", gap: 24, flexWrap: "wrap",
-      }}>
-        {[
-          { label: "Settlement", value: 12, suffix: "ms", prefix: "<" },
-          { label: "Uptime", value: 99.9, suffix: "%" },
-          { label: "Gas per tx", value: 0.001, suffix: "", prefix: "$" },
-          { label: "Protocols", value: 3, suffix: "+" },
-        ].map((s, i) => (
-          <div key={i} data-reveal data-reveal-delay={i * 100} style={{
-            padding: "20px 32px", borderRadius: 12,
-            background: "var(--bg-card)", backdropFilter: "blur(8px)",
-            border: "1px solid var(--border)", textAlign: "center",
-            opacity: 0, transform: "translateY(20px)",
-            transition: "opacity 0.6s cubic-bezier(.22,1,.36,1), transform 0.6s cubic-bezier(.22,1,.36,1)",
+          <p data-reveal data-reveal-delay="160" style={{
+            fontSize: "clamp(16px, 1.8vw, 19px)",
+            color: "var(--text-secondary)", lineHeight: 1.7,
+            maxWidth: 560, margin: "0 auto 40px",
           }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: "var(--green-300)" }}>
-              {typeof s.value === "number" && s.value % 1 === 0
-                ? <Counter end={s.value} suffix={s.suffix} prefix={s.prefix || ""} />
-                : <>{s.prefix}{s.value}{s.suffix}</>}
-            </div>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{s.label}</div>
-          </div>
-        ))}
-      </section>
-
-      {/* ── Code Demo ── */}
-      <section id="code-demo" style={{ position: "relative", zIndex: 2, padding: "80px 24px", maxWidth: 800, margin: "0 auto" }}>
-        <div data-reveal style={{ opacity: 0, transform: "translateY(20px)", transition: "opacity 0.6s, transform 0.6s" }}>
-          <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8, textAlign: "center" }}>
-            Ship in minutes, not months
-          </h2>
-          <p style={{ color: "var(--text-muted)", textAlign: "center", marginBottom: 40 }}>
-            Four lines of code to create a wallet. Four more to send a payment.
+            Managed wallets, spending policies, and real USDC settlement on Base.
+            P2P transfers, micropayments, and x402 paywalls — one API.
           </p>
-          <CodeDemo />
+
+          <div data-reveal data-reveal-delay="240" style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link href="/dashboard" style={{
+              padding: "14px 34px", borderRadius: 99,
+              background: "var(--gradient-brand)",
+              color: "white", fontWeight: 700, fontSize: 15,
+              transition: "transform 0.25s, box-shadow 0.25s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 32px var(--glow-violet)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+            >Get Started</Link>
+
+            <a href="#code" style={{
+              padding: "14px 34px", borderRadius: 99,
+              border: "1px solid var(--border-hover)",
+              color: "var(--text)", fontWeight: 600, fontSize: 15,
+              transition: "background 0.25s, border-color 0.25s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.06)"; e.currentTarget.style.borderColor = "var(--violet-400)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "var(--border-hover)"; }}
+            >View API</a>
+          </div>
         </div>
+
+        {/* Hero bottom fade */}
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: 200,
+          background: "linear-gradient(to top, var(--bg), transparent)",
+          zIndex: 3, pointerEvents: "none",
+        }} />
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" style={{ position: "relative", zIndex: 2, padding: "80px 24px", maxWidth: 1100, margin: "0 auto" }}>
-        <h2 data-reveal style={{
-          fontSize: 32, fontWeight: 800, textAlign: "center", marginBottom: 48,
-          opacity: 0, transform: "translateY(20px)", transition: "opacity 0.6s, transform 0.6s",
+      {/* ═══ STATS ═══ */}
+      <Section style={{ paddingBottom: "var(--section-gap)" }}>
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16,
         }}>
-          Built for the agent economy
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+          {[
+            { label: "Settlement", val: 12, suffix: "ms", prefix: "<" },
+            { label: "Gas per tx", val: 0.001, suffix: "", prefix: "$", dec: 3 },
+            { label: "Uptime SLA", val: 99.9, suffix: "%", dec: 1 },
+            { label: "Active protocols", val: 3, suffix: "+" },
+          ].map((s, i) => (
+            <div key={i} data-reveal data-reveal-delay={i * 80} style={{
+              padding: "28px 24px", borderRadius: "var(--radius-md)",
+              background: "var(--gradient-surface)",
+              border: "1px solid var(--border)",
+              textAlign: "center",
+            }}>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>
+                {s.dec ? <>{s.prefix}{s.val}{s.suffix}</> : <Counter end={s.val} suffix={s.suffix} prefix={s.prefix || ""} />}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 6, fontWeight: 500 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ═══ CODE DEMO ═══ */}
+      <Section id="code" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          <div data-reveal style={{ textAlign: "center", marginBottom: 48 }}>
+            <Badge variant="violet">Developer Experience</Badge>
+            <h2 style={{
+              fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+              fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+            }}>
+              Ship in <GradientText>minutes</GradientText>, not months
+            </h2>
+            <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 16 }}>
+              Four lines to create a wallet. Four more to send a payment. Full type safety.
+            </p>
+          </div>
+          <div data-reveal data-reveal-delay="100">
+            <CodeDemo />
+          </div>
+        </div>
+      </Section>
+
+      {/* ═══ FEATURES ═══ */}
+      <Section id="features" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="cyan">Capabilities</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            Everything agents need to <GradientText>transact</GradientText>
+          </h2>
+        </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 16,
+        }}>
           {features.map((f, i) => (
-            <div key={i} data-reveal data-reveal-delay={i * 80}>
-              <GlassCard style={{
-                opacity: 0, transform: "translateY(20px)",
-                transition: "opacity 0.6s cubic-bezier(.22,1,.36,1), transform 0.6s cubic-bezier(.22,1,.36,1), border-color 0.3s, box-shadow 0.3s",
-                height: "100%",
-              }}>
-                <div style={{ fontSize: 28, marginBottom: 12 }}>{f.icon}</div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{f.title}</h3>
-                <p style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>{f.desc}</p>
+            <div key={i} data-reveal data-reveal-delay={i * 70}>
+              <GlassCard style={{ height: "100%" }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: "var(--radius-md)",
+                  background: "rgba(139,92,246,0.08)",
+                  border: "1px solid rgba(139,92,246,0.12)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  marginBottom: 18,
+                }}>
+                  {f.icon}
+                </div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8, fontFamily: "var(--font-display)" }}>{f.title}</h3>
+                <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.65 }}>{f.desc}</p>
               </GlassCard>
             </div>
           ))}
         </div>
-      </section>
+      </Section>
 
-      {/* ── How It Works ── */}
-      <section id="how-it-works" style={{ position: "relative", zIndex: 2, padding: "80px 24px", maxWidth: 900, margin: "0 auto" }}>
-        <h2 data-reveal style={{
-          fontSize: 32, fontWeight: 800, textAlign: "center", marginBottom: 48,
-          opacity: 0, transform: "translateY(20px)", transition: "opacity 0.6s, transform 0.6s",
-        }}>
-          How it works
-        </h2>
-        <div style={{ display: "grid", gap: 16 }}>
+      {/* ═══ HOW IT WORKS ═══ */}
+      <Section id="how-it-works" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="violet">Workflow</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            From zero to <GradientText>settled</GradientText> in four steps
+          </h2>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
           {steps.map((s, i) => (
-            <div key={i} data-reveal data-reveal-delay={i * 80} style={{
-              display: "flex", gap: 20, alignItems: "flex-start",
-              padding: 24, borderRadius: 12,
-              background: "var(--bg-card)", backdropFilter: "blur(8px)",
-              border: "1px solid var(--border)",
-              opacity: 0, transform: "translateX(-20px)",
-              transition: "opacity 0.6s cubic-bezier(.22,1,.36,1), transform 0.6s cubic-bezier(.22,1,.36,1)",
-            }}>
+            <div key={i} data-reveal data-reveal-delay={i * 100}>
               <div style={{
-                minWidth: 44, height: 44, borderRadius: 10,
-                background: "linear-gradient(135deg, var(--green-700), var(--green-600))",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: "var(--mono)", fontWeight: 700, fontSize: 14,
-              }}>{s.num}</div>
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{s.title}</h3>
-                <p style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>{s.desc}</p>
+                padding: 28, borderRadius: "var(--radius-lg)",
+                border: "1px solid var(--border)",
+                background: "var(--gradient-surface)",
+                height: "100%",
+                position: "relative",
+              }}>
+                {/* Step number */}
+                <div style={{
+                  fontFamily: "var(--font-mono)", fontSize: 12,
+                  fontWeight: 600, color: "var(--violet-400)",
+                  marginBottom: 16, letterSpacing: "0.1em",
+                }}>STEP {s.num}</div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8, fontFamily: "var(--font-display)" }}>{s.title}</h3>
+                <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 }}>{s.desc}</p>
+                {/* Connector line */}
+                {i < steps.length - 1 && (
+                  <div style={{
+                    position: "absolute", right: -8, top: "50%",
+                    width: 16, height: 1,
+                    background: "var(--gradient-brand)",
+                    opacity: 0.3,
+                  }} />
+                )}
               </div>
             </div>
           ))}
         </div>
-      </section>
+      </Section>
 
-      {/* ── CTA / Waitlist ── */}
-      <section style={{
-        position: "relative", zIndex: 2, padding: "80px 24px", textAlign: "center",
-      }}>
-        <div data-reveal style={{
-          maxWidth: 600, margin: "0 auto", padding: 48, borderRadius: 20,
-          background: "linear-gradient(135deg, rgba(10,25,18,0.8), rgba(5,15,10,0.9))",
-          border: "1px solid var(--border)",
-          opacity: 0, transform: "translateY(20px)", transition: "opacity 0.6s, transform 0.6s",
-        }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12 }}>Get early access</h2>
-          <p style={{ color: "var(--text-muted)", marginBottom: 24, fontSize: 15 }}>
-            Join the waitlist for NexusPay — we&apos;re onboarding agent builders now.
-          </p>
-          <div style={{ display: "flex", gap: 8, maxWidth: 400, margin: "0 auto" }}>
-            <input
-              type="email"
-              placeholder="you@agent.dev"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{
-                flex: 1, padding: "12px 16px", borderRadius: 8,
-                background: "rgba(5,15,10,0.6)", border: "1px solid var(--border)",
-                color: "var(--text)", fontSize: 14, outline: "none",
-                fontFamily: "var(--font)",
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--green-500)")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-            />
-            <button style={{
-              padding: "12px 24px", borderRadius: 8,
-              background: "linear-gradient(135deg, var(--green-500), var(--green-400))",
-              color: "var(--bg)", fontWeight: 700, fontSize: 14,
-              border: "none",
-              transition: "transform 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1px)")}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
-            >Join</button>
+      {/* ═══ PRICING ═══ */}
+      <Section id="pricing" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="cyan">Pricing</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            Simple, usage-based <GradientText>pricing</GradientText>
+          </h2>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, maxWidth: 960, margin: "0 auto" }}>
+          {[
+            {
+              name: "Starter", price: "Free", desc: "For experimentation",
+              features: ["3 agent wallets", "100 tx/month", "Basic policies", "Testnet only", "Community support"],
+              cta: "Start Free", featured: false,
+            },
+            {
+              name: "Growth", price: "$49", desc: "For production agents",
+              features: ["Unlimited wallets", "10,000 tx/month", "Advanced policies", "Mainnet + Testnet", "P2P + x402", "Priority support"],
+              cta: "Get Started", featured: true,
+            },
+            {
+              name: "Enterprise", price: "Custom", desc: "For fleet operators",
+              features: ["Unlimited everything", "Custom rate limits", "Dedicated support", "SLA guarantee", "Custom integrations", "Audit logs"],
+              cta: "Contact Sales", featured: false,
+            },
+          ].map((plan, i) => (
+            <div key={i} data-reveal data-reveal-delay={i * 100}>
+              <div style={{
+                padding: 32, borderRadius: "var(--radius-lg)",
+                border: plan.featured ? "1px solid rgba(139,92,246,0.3)" : "1px solid var(--border)",
+                background: plan.featured ? "rgba(139,92,246,0.04)" : "var(--gradient-surface)",
+                height: "100%",
+                display: "flex", flexDirection: "column",
+                position: "relative",
+              }}>
+                {plan.featured && (
+                  <div style={{
+                    position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)",
+                    padding: "4px 14px", borderRadius: "0 0 8px 8px",
+                    background: "var(--gradient-brand)",
+                    fontSize: 11, fontWeight: 700, color: "white", letterSpacing: "0.05em",
+                  }}>POPULAR</div>
+                )}
+                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{plan.name}</div>
+                <div style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16 }}>{plan.desc}</div>
+                <div style={{
+                  fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 800,
+                  letterSpacing: "-0.03em", marginBottom: 4,
+                }}>
+                  {plan.price}
+                  {plan.price !== "Free" && plan.price !== "Custom" && (
+                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-tertiary)" }}>/mo</span>
+                  )}
+                </div>
+                <div style={{
+                  height: 1, background: "var(--border)", margin: "20px 0",
+                }} />
+                <ul style={{ flex: 1, listStyle: "none", display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
+                  {plan.features.map((f) => (
+                    <li key={f} style={{ fontSize: 14, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 10 }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M11.5 3.5L5.5 10L2.5 7" stroke={plan.featured ? "#8b5cf6" : "#5E586B"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button style={{
+                  width: "100%", padding: "12px 24px", borderRadius: 99,
+                  background: plan.featured ? "var(--gradient-brand)" : "transparent",
+                  border: plan.featured ? "none" : "1px solid var(--border-hover)",
+                  color: plan.featured ? "white" : "var(--text)",
+                  fontWeight: 600, fontSize: 14,
+                  transition: "transform 0.25s, box-shadow 0.25s, background 0.25s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                  if (plan.featured) e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)";
+                  else e.currentTarget.style.background = "rgba(139,92,246,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "none";
+                  if (!plan.featured) e.currentTarget.style.background = "transparent";
+                }}
+                >{plan.cta}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ═══ FAQ ═══ */}
+      <Section style={{ paddingBottom: "var(--section-gap)" }}>
+        <div style={{ maxWidth: 680, margin: "0 auto" }}>
+          <div data-reveal style={{ textAlign: "center", marginBottom: 48 }}>
+            <Badge variant="default">FAQ</Badge>
+            <h2 style={{
+              fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+              fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+            }}>
+              Common questions
+            </h2>
+          </div>
+          <div data-reveal data-reveal-delay="100">
+            <FAQ />
           </div>
         </div>
-      </section>
+      </Section>
 
-      {/* ── Footer ── */}
+      {/* ═══ CTA ═══ */}
+      <Section style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{
+          maxWidth: 640, margin: "0 auto",
+          padding: "56px 48px", borderRadius: "var(--radius-xl)",
+          background: "rgba(139,92,246,0.04)",
+          border: "1px solid rgba(139,92,246,0.15)",
+          textAlign: "center",
+          position: "relative", overflow: "hidden",
+        }}>
+          {/* Decorative gradient */}
+          <div style={{
+            position: "absolute", top: "-50%", left: "50%", transform: "translateX(-50%)",
+            width: 500, height: 500, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }} />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <h2 style={{
+              fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800,
+              letterSpacing: "-0.02em", marginBottom: 12,
+            }}>
+              Ready to build the <GradientText>agent economy</GradientText>?
+            </h2>
+            <p style={{ color: "var(--text-secondary)", marginBottom: 28, fontSize: 15 }}>
+              Join builders shipping agent payment infrastructure today.
+            </p>
+            <div style={{ display: "flex", gap: 8, maxWidth: 400, margin: "0 auto" }}>
+              <input
+                type="email" placeholder="you@agent.dev"
+                value={email} onChange={(e) => setEmail(e.target.value)}
+                style={{
+                  flex: 1, padding: "12px 18px", borderRadius: 99,
+                  background: "rgba(9,9,15,0.6)", border: "1px solid var(--border)",
+                  color: "var(--text)", fontSize: 14, outline: "none",
+                  fontFamily: "var(--font-body)",
+                  transition: "border-color 0.2s",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--violet-500)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+              />
+              <button style={{
+                padding: "12px 28px", borderRadius: 99,
+                background: "var(--gradient-brand)",
+                color: "white", fontWeight: 700, fontSize: 14,
+                transition: "transform 0.2s, box-shadow 0.2s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 20px var(--glow-violet)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >Join Waitlist</button>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ═══ FOOTER ═══ */}
       <footer style={{
         position: "relative", zIndex: 2,
-        padding: "40px 32px",
-        borderTop: "1px solid var(--border)",
+        maxWidth: "var(--container-max)", margin: "0 auto",
+        padding: "40px var(--container-padding)",
+        borderTop: "1px solid var(--border-subtle)",
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontSize: 13, color: "var(--text-muted)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <NexusLogo size={24} />
-          <span>NexusPay</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <NexusLogo size={22} />
+          <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "var(--font-display)" }}>NexusPay</span>
         </div>
-        <span>USDC on Base &middot; Built for agents</span>
+        <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>USDC on Base &middot; Built for agents</span>
       </footer>
-
-      {/* ── Global reveal styles ── */}
-      <style jsx global>{`
-        [data-reveal].revealed {
-          opacity: 1 !important;
-          transform: translate(0, 0) !important;
-        }
-      `}</style>
     </div>
   );
 }
