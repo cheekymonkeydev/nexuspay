@@ -36,7 +36,7 @@ interface ApiKey {
 }
 
 /* ═══ Constants ═══ */
-type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "treasury";
+type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys";
 const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
@@ -45,7 +45,6 @@ const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "policies", label: "Policies", icon: "⊞" },
   { key: "x402", label: "x402", icon: "⚡" },
   { key: "analytics", label: "Analytics", icon: "◉" },
-  { key: "treasury", label: "Treasury", icon: "◬" },
   { key: "keys", label: "API Keys", icon: "⌗" },
 ];
 
@@ -1618,7 +1617,7 @@ export default function Dashboard() {
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
     p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, analytics: <AnalyticsTab />,
-    treasury: <TreasuryTab />, keys: <ApiKeysTab />,
+    keys: <ApiKeysTab />,
   };
 
   return (
