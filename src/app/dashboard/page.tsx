@@ -14,8 +14,8 @@ interface Wallet {
 }
 interface Tx {
   id: string; fromAgentId: string; toAddress: string; toAgentId?: string;
-  amountUsdc: number; status: string; txHash?: string; category?: string;
-  memo?: string; isP2P: boolean; createdAt: string; failureReason?: string;
+  amountUsdc: number; status: string; txHash?: string | null; category?: string;
+  memo?: string; isP2P: boolean; createdAt: string; failureReason?: string | null;
 }
 interface Policy {
   id: string; agentId: string; tier: string; maxPerTransaction: number;
@@ -27,13 +27,16 @@ interface Paywall {
   id: string; path: string; priceUsdc: number; description?: string;
   isActive: boolean; totalPaid: number; hitCount: number;
 }
+interface Treasury {
+  id: string; balanceUsdc: number; totalFunded: number; totalDisbursed: number; updatedAt: string;
+}
 interface ApiKey {
   id: string; name: string; prefix: string; scopes: string[];
   isActive: boolean; lastUsedAt: string | null; createdAt: string;
 }
 
 /* ═══ Constants ═══ */
-type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys";
+type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "treasury";
 const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
@@ -42,6 +45,7 @@ const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "policies", label: "Policies", icon: "⊞" },
   { key: "x402", label: "x402", icon: "⚡" },
   { key: "analytics", label: "Analytics", icon: "◉" },
+  { key: "treasury", label: "Treasury", icon: "◬" },
   { key: "keys", label: "API Keys", icon: "⌗" },
 ];
 
@@ -810,6 +814,7 @@ function TransactionsTab() {
   const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const [agentFilter, setAgentFilter] = useState("all");
+  const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showSend, setShowSend] = useState(false);
   const [fromAgent, setFromAgent] = useState("");
@@ -894,10 +899,11 @@ function TransactionsTab() {
                 <Badge key="cat" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : (t.category || "—").toUpperCase()}</Badge>,
                 <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
                 <MonoText key="hash">{t.txHash ? truncAddr(t.txHash) : "—"}</MonoText>,
-                <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
+                <button key="time" onClick={() => setSelectedTx(t)} style={{ fontSize: 12, color: "var(--text-tertiary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", textDecorationStyle: "dotted" }}>{timeAgo(t.createdAt)}</button>,
               ])}
             />
         }
+        {selectedTx && <TxDetailModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
       </div>
 
       {showSend && (
@@ -1058,46 +1064,77 @@ function P2PTab() {
   );
 }
 
+function PolicyForm({ initial, wallets, onSave, onClose, saving, err: formErr }: {
+  initial?: Policy; wallets: Wallet[]; onSave: (d: Record<string, unknown>) => void;
+  onClose: () => void; saving: boolean; err: string;
+}) {
+  const [pAgent, setPAgent] = useState(initial?.agentId ?? "");
+  const [pTier, setPTier] = useState(initial?.tier ?? "MODERATE");
+  const [pMaxTx, setPMaxTx] = useState(String(initial?.maxPerTransaction ?? "50"));
+  const [pDaily, setPDaily] = useState(String(initial?.dailyLimit ?? "500"));
+  const [pMonthly, setPMonthly] = useState(String(initial?.monthlyLimit ?? "5000"));
+  const [pApproval, setPApproval] = useState(initial?.requireApproval ?? false);
+  const selectStyle = { width: "100%", background: "var(--bg-secondary)", border: "1px solid var(--border-primary)", borderRadius: 8, padding: "10px 12px", color: "var(--text-primary)", fontSize: 13 };
+  return (
+    <Modal title={initial ? "Edit Policy" : "Create Spending Policy"} onClose={onClose}>
+      {!initial && (
+        <Field label="Agent">
+          <select value={pAgent} onChange={(e) => setPAgent(e.target.value)} style={selectStyle}>
+            <option value="">Select agent…</option>
+            {wallets.map((w) => <option key={w.agentId} value={w.agentId}>{w.agentId}</option>)}
+          </select>
+        </Field>
+      )}
+      <Field label="Tier">
+        <select value={pTier} onChange={(e) => setPTier(e.target.value)} style={selectStyle}>
+          {["CONSERVATIVE","MODERATE","AGGRESSIVE","CUSTOM"].map(t => <option key={t} value={t}>{t[0]+t.slice(1).toLowerCase()}</option>)}
+        </select>
+      </Field>
+      <Field label="Max per transaction ($)"><Input value={pMaxTx} onChange={setPMaxTx} type="number" placeholder="50" /></Field>
+      <Field label="Daily limit ($)"><Input value={pDaily} onChange={setPDaily} type="number" placeholder="500" /></Field>
+      <Field label="Monthly limit ($)"><Input value={pMonthly} onChange={setPMonthly} type="number" placeholder="5000" /></Field>
+      <Field label="">
+        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13 }}>
+          <input type="checkbox" checked={pApproval} onChange={(e) => setPApproval(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--accent-primary)" }} />
+          <span>Require approval for all transactions</span>
+        </label>
+      </Field>
+      {formErr && <div style={{ color: "#f87171", fontSize: 13 }}>{formErr}</div>}
+      <button onClick={() => onSave({ agentId: pAgent, tier: pTier, maxPerTransaction: parseFloat(pMaxTx), dailyLimit: parseFloat(pDaily), monthlyLimit: parseFloat(pMonthly), requireApproval: pApproval, allowedRecipients: [], blockedMerchants: [], allowedCategories: [] })} disabled={saving} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, marginTop: 4 }}>
+        {saving ? "Saving…" : initial ? "Save Changes" : "Create Policy"}
+      </button>
+    </Modal>
+  );
+}
+
 function PoliciesTab() {
   const { data: policies, loading, error, refetch } = useApi<Policy[]>("/api/policies");
   const { data: wallets } = useApi<Wallet[]>("/api/wallets");
   const [showCreate, setShowCreate] = useState(false);
-  const [pAgent, setPAgent] = useState("");
-  const [pTier, setPTier] = useState("MODERATE");
-  const [pMaxTx, setPMaxTx] = useState("50");
-  const [pDaily, setPDaily] = useState("500");
-  const [pMonthly, setPMonthly] = useState("5000");
-  const [pRequireApproval, setPRequireApproval] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createErr, setCreateErr] = useState("");
+  const [editing, setEditing] = useState<Policy | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState("");
 
-  async function createPolicy() {
-    if (!pAgent) { setCreateErr("Select an agent"); return; }
-    setCreating(true); setCreateErr("");
+  async function savePolicy(data: Record<string, unknown>) {
+    if (!editing && !data.agentId) { setFormErr("Select an agent"); return; }
+    setSaving(true); setFormErr("");
     try {
-      const res = await fetch("/api/policies", {
-        method: "POST",
+      const res = await fetch(editing ? `/api/policies/${editing.id}` : "/api/policies", {
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agentId: pAgent,
-          tier: pTier,
-          maxPerTransaction: parseFloat(pMaxTx),
-          dailyLimit: parseFloat(pDaily),
-          monthlyLimit: parseFloat(pMonthly),
-          requireApproval: pRequireApproval,
-          allowedRecipients: [],
-          blockedMerchants: [],
-          allowedCategories: [],
-        }),
+        body: JSON.stringify(data),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed");
-      setShowCreate(false);
-      setPAgent(""); setPMaxTx("50"); setPDaily("500"); setPMonthly("5000"); setPRequireApproval(false);
-      refetch();
-    } catch (e: unknown) {
-      setCreateErr(e instanceof Error ? e.message : "Error");
-    } finally { setCreating(false); }
+      setShowCreate(false); setEditing(null); refetch();
+    } catch (e: unknown) { setFormErr(e instanceof Error ? e.message : "Error"); }
+    finally { setSaving(false); }
+  }
+
+  async function deletePolicy(id: string) {
+    if (!confirm("Delete this policy? This cannot be undone.")) return;
+    await fetch(`/api/policies/${id}`, { method: "DELETE" });
+    refetch();
   }
 
   if (loading) return <Loader />;
@@ -1107,26 +1144,24 @@ function PoliciesTab() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Spending Policies</h3>
-        <button onClick={() => setShowCreate(true)} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-          + Create Policy
-        </button>
+        <button onClick={() => setShowCreate(true)} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Create Policy</button>
       </div>
+      {(policies ?? []).length === 0 && <EmptyState icon="⊞" title="No policies yet" sub="Create a spending policy to control how agents spend USDC" />}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
         {(policies ?? []).map((p) => (
           <GlassCard key={p.id} style={{ padding: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
-              <span style={{ fontWeight: 700, fontFamily: "var(--font-display)", fontSize: 14 }}>{p.agentId}</span>
-              <Badge variant={p.tier === "CONSERVATIVE" ? "cyan" : p.tier === "MODERATE" ? "warning" : "danger"}>{p.tier}</Badge>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14, alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontFamily: "var(--font-display)", fontSize: 14 }}>{p.agentId}</div>
+                <Badge variant={p.tier === "CONSERVATIVE" ? "cyan" : p.tier === "MODERATE" ? "warning" : "danger"}>{p.tier}</Badge>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setEditing(p)} style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 6, padding: "4px 10px", color: "var(--violet-300)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Edit</button>
+                <button onClick={() => deletePolicy(p.id)} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, padding: "4px 10px", color: "#f87171", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Delete</button>
+              </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 13 }}>
-              {([
-                ["Per tx", `$${p.maxPerTransaction}`],
-                ["Daily", `$${p.dailyLimit}`],
-                ["Monthly", p.monthlyLimit ? `$${p.monthlyLimit.toLocaleString()}` : "—"],
-                ["Recipients", String(p.allowedRecipients.length || "Any")],
-                ["Blocked", `${p.blockedMerchants.length}`],
-                ["Approval", p.requireApproval ? "Required" : "Auto"],
-              ] as [string, string][]).map(([k, v]) => (
+              {([["Per tx", `$${p.maxPerTransaction}`], ["Daily", `$${p.dailyLimit}`], ["Monthly", p.monthlyLimit ? `$${p.monthlyLimit.toLocaleString()}` : "—"], ["Approval", p.requireApproval ? "Required" : "Auto"]] as [string,string][]).map(([k,v]) => (
                 <div key={k}>
                   <span style={{ color: "var(--text-tertiary)", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>{k}</span>
                   <div style={{ fontWeight: 600, marginTop: 2 }}>{v}</div>
@@ -1136,43 +1171,8 @@ function PoliciesTab() {
           </GlassCard>
         ))}
       </div>
-      {showCreate && (
-        <Modal title="Create Spending Policy" onClose={() => setShowCreate(false)}>
-          <Field label="Agent">
-            <select value={pAgent} onChange={(e) => setPAgent(e.target.value)} style={{ width: "100%", background: "var(--bg-secondary)", border: "1px solid var(--border-primary)", borderRadius: 8, padding: "10px 12px", color: "var(--text-primary)", fontSize: 13 }}>
-              <option value="">Select agent…</option>
-              {(wallets ?? []).map((w) => <option key={w.agentId} value={w.agentId}>{w.agentId}</option>)}
-            </select>
-          </Field>
-          <Field label="Tier">
-            <select value={pTier} onChange={(e) => setPTier(e.target.value)} style={{ width: "100%", background: "var(--bg-secondary)", border: "1px solid var(--border-primary)", borderRadius: 8, padding: "10px 12px", color: "var(--text-primary)", fontSize: 13 }}>
-              <option value="CONSERVATIVE">Conservative</option>
-              <option value="MODERATE">Moderate</option>
-              <option value="AGGRESSIVE">Aggressive</option>
-              <option value="CUSTOM">Custom</option>
-            </select>
-          </Field>
-          <Field label="Max per transaction ($)">
-            <Input value={pMaxTx} onChange={setPMaxTx} type="number" placeholder="50" />
-          </Field>
-          <Field label="Daily limit ($)">
-            <Input value={pDaily} onChange={setPDaily} type="number" placeholder="500" />
-          </Field>
-          <Field label="Monthly limit ($)">
-            <Input value={pMonthly} onChange={setPMonthly} type="number" placeholder="5000" />
-          </Field>
-          <Field label="">
-            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13 }}>
-              <input type="checkbox" checked={pRequireApproval} onChange={(e) => setPRequireApproval(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--accent-primary)" }} />
-              <span>Require approval for all transactions</span>
-            </label>
-          </Field>
-          {createErr && <div style={{ color: "#f87171", fontSize: 13 }}>{createErr}</div>}
-          <button onClick={createPolicy} disabled={creating} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.7 : 1, marginTop: 4 }}>
-            {creating ? "Creating…" : "Create Policy"}
-          </button>
-        </Modal>
-      )}
+      {showCreate && <PolicyForm wallets={wallets ?? []} onSave={savePolicy} onClose={() => setShowCreate(false)} saving={saving} err={formErr} />}
+      {editing && <PolicyForm initial={editing} wallets={wallets ?? []} onSave={savePolicy} onClose={() => setEditing(null)} saving={saving} err={formErr} />}
     </div>
   );
 }
@@ -1225,14 +1225,21 @@ function X402Tab() {
           + Register Endpoint
         </button>
       </div>
+      {(endpoints ?? []).length === 0 && <EmptyState icon="⚡" title="No endpoints yet" sub="Register a paywall endpoint to start earning per-request USDC" />}
       <DataTable
-        headers={["Path", "Price", "Hits", "Revenue", "Status"]}
+        headers={["Path", "Price", "Hits", "Revenue", "Status", ""]}
         rows={(endpoints ?? []).map((p) => [
           <MonoText key="path">{p.path}</MonoText>,
           <span key="price" style={{ fontFamily: "var(--font-mono)" }}>${p.priceUsdc.toFixed(4)}</span>,
           p.hitCount.toLocaleString(),
           <span key="rev" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${p.totalPaid.toFixed(2)}</span>,
           <Badge key="st" variant={p.isActive ? "success" : "default"}>{p.isActive ? "ACTIVE" : "DISABLED"}</Badge>,
+          <button key="toggle" onClick={async () => {
+            await fetch(`/api/x402/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !p.isActive }) });
+            refetch();
+          }} style={{ background: p.isActive ? "rgba(239,68,68,0.08)" : "rgba(6,182,212,0.08)", border: `1px solid ${p.isActive ? "rgba(239,68,68,0.2)" : "rgba(6,182,212,0.2)"}`, borderRadius: 6, padding: "4px 10px", color: p.isActive ? "#f87171" : "var(--cyan-400)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            {p.isActive ? "Disable" : "Enable"}
+          </button>,
         ])}
       />
       {showRegister && (
@@ -1487,6 +1494,121 @@ function ApiKeysTab() {
   );
 }
 
+/* ═══ Treasury Tab ═══ */
+function TreasuryTab() {
+  const { data: treasury, loading, error } = useApi<Treasury>("/api/treasury", 30_000);
+  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+
+  if (loading) return <Loader />;
+  if (error) return <ErrorMsg message={error} />;
+  if (!treasury) return <EmptyState icon="◬" title="No treasury found" sub="Run the seed script to initialise the treasury" />;
+
+  const totalWalletBalance = (wallets ?? []).reduce((s, w) => s + w.balanceUsdc, 0);
+  const available = treasury.balanceUsdc;
+  const utilizationPct = treasury.totalFunded > 0 ? ((treasury.totalDisbursed / treasury.totalFunded) * 100).toFixed(1) : "0";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <Stat label="Available Balance" value={`$${available.toFixed(2)}`} sub="Ready to fund new wallets" />
+        <Stat label="Total Funded" value={`$${treasury.totalFunded.toLocaleString()}`} sub="All time disbursements" />
+        <Stat label="Total Disbursed" value={`$${treasury.totalDisbursed.toFixed(2)}`} sub={`${utilizationPct}% utilization`} />
+        <Stat label="In Agent Wallets" value={`$${totalWalletBalance.toFixed(2)}`} sub={`${wallets?.length ?? 0} wallets`} />
+      </div>
+
+      <GlassCard style={{ padding: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 16 }}>Treasury Health</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+              <span style={{ color: "var(--text-secondary)" }}>Funds disbursed</span>
+              <span style={{ fontWeight: 600 }}>{utilizationPct}%</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)" }}>
+              <div style={{ height: 6, borderRadius: 3, background: "var(--gradient-brand)", width: `${Math.min(parseFloat(utilizationPct), 100)}%`, transition: "width 0.6s ease" }} />
+            </div>
+          </div>
+          {[
+            ["Treasury ID", treasury.id],
+            ["Last Updated", new Date(treasury.updatedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })],
+            ["Network", process.env.NEXT_PUBLIC_NETWORK ?? "base-sepolia"],
+          ].map(([k, v]) => (
+            <div key={String(k)} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, paddingTop: 10, borderTop: "1px solid var(--border-subtle)" }}>
+              <span style={{ color: "var(--text-tertiary)" }}>{k}</span>
+              <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+
+      <GlassCard style={{ padding: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 16 }}>Agent Wallet Balances</div>
+        {(wallets ?? []).length === 0
+          ? <EmptyState icon="◈" title="No wallets" sub="Create a wallet to see balances here" />
+          : <DataTable
+              headers={["Agent", "Balance", "Status"]}
+              rows={(wallets ?? []).map((w) => [
+                <span key="a" style={{ fontWeight: 600 }}>{w.agentId}</span>,
+                <span key="b" style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>${w.balanceUsdc.toFixed(2)}</span>,
+                <Badge key="s" variant={statusVariant[w.status] || "default"}>{w.status}</Badge>,
+              ])}
+            />
+        }
+      </GlassCard>
+    </div>
+  );
+}
+
+/* ═══ Transaction Detail Modal ═══ */
+function TxDetailModal({ tx, onClose }: { tx: Tx; onClose: () => void }) {
+  const network = "base-sepolia";
+  const basescanUrl = tx.txHash ? `https://sepolia.basescan.org/tx/${tx.txHash}` : null;
+
+  return (
+    <Modal title="Transaction Details" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        {[
+          ["ID", tx.id],
+          ["From Agent", tx.fromAgentId],
+          ["To", tx.toAgentId || tx.toAddress],
+          ["Amount", `$${tx.amountUsdc < 0.01 ? tx.amountUsdc.toFixed(6) : tx.amountUsdc.toFixed(2)} USDC`],
+          ["Status", tx.status],
+          ["Type", tx.isP2P ? "P2P Transfer" : tx.category === "x402" ? "x402 Payment" : "On-Chain"],
+          ["Category", tx.category || "—"],
+          ["Memo", tx.memo || "—"],
+          ["Created", new Date(tx.createdAt).toLocaleString("en-GB")],
+        ].map(([k, v]) => (
+          <div key={String(k)} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border-subtle)", fontSize: 13, gap: 16 }}>
+            <span style={{ color: "var(--text-tertiary)", flexShrink: 0 }}>{k}</span>
+            <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)", textAlign: "right", wordBreak: "break-all" }}>{v}</span>
+          </div>
+        ))}
+        {tx.txHash && (
+          <div style={{ padding: "10px 0", borderBottom: "1px solid var(--border-subtle)", fontSize: 13 }}>
+            <div style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>Tx Hash</div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, wordBreak: "break-all", color: "var(--text)" }}>{tx.txHash}</div>
+          </div>
+        )}
+        {tx.failureReason && (
+          <div style={{ padding: "10px 0", fontSize: 13 }}>
+            <div style={{ color: "#f87171", fontWeight: 600, marginBottom: 4 }}>Failure Reason</div>
+            <div style={{ color: "#fca5a5", fontSize: 12 }}>{tx.failureReason}</div>
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+        {basescanUrl && (
+          <a href={basescanUrl} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "block", textAlign: "center", padding: "10px", borderRadius: 8, background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)", color: "var(--cyan-400)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+            View on Basescan ↗
+          </a>
+        )}
+        <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: 8, background: "transparent", border: "1px solid var(--border-hover)", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Close</button>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", marginTop: 4 }}>Network: {network}</div>
+    </Modal>
+  );
+}
+
 /* ═══ MAIN DASHBOARD ═══ */
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -1496,7 +1618,7 @@ export default function Dashboard() {
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
     p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, analytics: <AnalyticsTab />,
-    keys: <ApiKeysTab />,
+    treasury: <TreasuryTab />, keys: <ApiKeysTab />,
   };
 
   return (
