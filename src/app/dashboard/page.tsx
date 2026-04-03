@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { NexusLogo, AmbientGlow, GlassCard, Badge, useScrollReveal } from "@/components/shared";
 import { useApi } from "@/lib/hooks";
@@ -33,6 +33,76 @@ interface Treasury {
 interface ApiKey {
   id: string; name: string; prefix: string; scopes: string[];
   isActive: boolean; lastUsedAt: string | null; createdAt: string;
+}
+
+/* ═══ Wallet status (top-right header) ═══ */
+function WalletStatus() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.address) setAddress(d.address);
+    });
+  }, []);
+
+  const disconnect = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/";
+  };
+
+  // Open mode or not connected — show nothing
+  if (!address) return null;
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "8px 16px", borderRadius: 99,
+          background: "rgba(139,92,246,0.08)",
+          border: "1px solid rgba(139,92,246,0.2)",
+          color: "var(--violet-300)", fontSize: 13, fontWeight: 600,
+          fontFamily: "var(--font-mono)", cursor: "pointer",
+          transition: "all 0.2s",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.14)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.08)"; }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan-400)", boxShadow: "0 0 6px var(--cyan-400)" }} />
+        {address.slice(0, 6)}…{address.slice(-4)}
+        <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>
+      </button>
+
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setOpen(false)} />
+          <div style={{
+            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 100,
+            background: "rgba(13,13,20,0.98)", border: "1px solid var(--border-hover)",
+            borderRadius: "var(--radius-md)", padding: 6, minWidth: 180,
+            boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          }}>
+            <div style={{ padding: "8px 12px", fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", borderBottom: "1px solid var(--border-subtle)", marginBottom: 4 }}>
+              {address}
+            </div>
+            <button
+              onClick={disconnect}
+              style={{
+                width: "100%", textAlign: "left", padding: "9px 12px",
+                borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 500,
+                color: "#f87171", background: "transparent", border: "none",
+                cursor: "pointer", transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >Disconnect</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 /* ═══ Constants ═══ */
@@ -254,6 +324,161 @@ function Input({ value, onChange, placeholder, type = "text" }: {
 }
 
 /* ═══ Wallet Detail Drawer ═══ */
+/* ─── Fund Wallet Modal ───────────────────────────────── */
+function FundModal({ wallet, network, onClose, onBalanceUpdate }: {
+  wallet: Wallet; network: string; onClose: () => void; onBalanceUpdate: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [balance, setBalance] = useState(wallet.balanceUsdc);
+  const [detected, setDetected] = useState(false);
+  const prevBalanceRef = useRef(wallet.balanceUsdc);
+
+  // Generate QR code on mount
+  useEffect(() => {
+    if (!wallet.address || !canvasRef.current) return;
+    import("qrcode").then((QRCode) => {
+      QRCode.toCanvas(canvasRef.current!, wallet.address, {
+        width: 200, margin: 2,
+        color: { dark: "#a78bfa", light: "#0a0a12" },
+      });
+    });
+  }, [wallet.address]);
+
+  // Poll balance every 5s
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/wallets/${wallet.agentId}`);
+        const json = await res.json();
+        const newBal: number = json.data?.balanceUsdc ?? json.balanceUsdc ?? prevBalanceRef.current;
+        if (newBal > prevBalanceRef.current) {
+          setDetected(true);
+          onBalanceUpdate();
+        }
+        prevBalanceRef.current = newBal;
+        setBalance(newBal);
+      } catch { /* ignore */ }
+    };
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, [wallet.agentId, onBalanceUpdate]);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const basescanUrl = network.includes("mainnet") || network === "base"
+    ? `https://basescan.org/address/${wallet.address}`
+    : `https://sepolia.basescan.org/address/${wallet.address}`;
+
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }} onClick={onClose} />
+      <div style={{
+        position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+        zIndex: 201, width: 400, maxWidth: "95vw",
+        background: "rgba(10,10,18,0.99)", backdropFilter: "blur(24px)",
+        border: "1px solid rgba(139,92,246,0.25)",
+        borderRadius: "var(--radius-xl)",
+        padding: 32,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
+      }}>
+        {/* Header */}
+        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em" }}>Fund Wallet</div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>{wallet.agentId}</div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 30, height: 30, borderRadius: "50%", fontSize: 18,
+            color: "var(--text-tertiary)", background: "rgba(255,255,255,0.05)",
+            border: "1px solid var(--border)", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>×</button>
+        </div>
+
+        {/* QR Code */}
+        <div style={{
+          padding: 12, borderRadius: "var(--radius-md)",
+          background: "#0a0a12", border: "1px solid rgba(139,92,246,0.2)",
+        }}>
+          <canvas ref={canvasRef} style={{ display: "block", borderRadius: 6 }} />
+        </div>
+
+        {/* Instruction */}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            Send <strong style={{ color: "var(--text)" }}>USDC</strong> on <strong style={{ color: "var(--violet-300)" }}>Base</strong> to this address.
+            Balance updates automatically every 5 seconds.
+          </div>
+        </div>
+
+        {/* Address */}
+        <div style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 8,
+          padding: "12px 14px",
+          background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, flex: 1, color: "var(--text-secondary)", wordBreak: "break-all", lineHeight: 1.5 }}>
+            {wallet.address}
+          </span>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <CopyBtn text={wallet.address} />
+            <a href={basescanUrl} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+              color: "var(--cyan-400)", background: "rgba(6,182,212,0.08)",
+              border: "1px solid rgba(6,182,212,0.2)",
+              padding: "3px 9px", borderRadius: 5, textDecoration: "none",
+            }}>↗</a>
+          </div>
+        </div>
+
+        {/* Live balance */}
+        <div style={{
+          width: "100%", padding: "16px 20px", borderRadius: "var(--radius-md)",
+          background: detected
+            ? "linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(139,92,246,0.06) 100%)"
+            : "rgba(255,255,255,0.02)",
+          border: `1px solid ${detected ? "rgba(6,182,212,0.35)" : "var(--border)"}`,
+          transition: "all 0.4s ease",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 4 }}>
+              Current Balance
+            </div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: detected ? "var(--cyan-400)" : "var(--text)" }}>
+              ${balance.toFixed(2)}
+            </div>
+          </div>
+          {detected ? (
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan-400)", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 16 }}>✓</span> Funds detected!
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: "var(--text-tertiary)",
+                  animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                }} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.5 }}>
+          Only send USDC on Base. Other tokens or networks will be lost.
+        </div>
+      </div>
+    </>
+  );
+}
+
 function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
   wallet: Wallet; txns: Tx[]; policies: Policy[]; network: string; onClose: () => void; onUpdate: () => void;
 }) {
@@ -261,6 +486,7 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
   const [toggling, setToggling] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [showFund, setShowFund] = useState(false);
 
   const syncBalance = async () => {
     setSyncing(true); setSyncResult(null);
@@ -363,7 +589,26 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
             <div style={{ fontFamily: "var(--font-display)", fontSize: 38, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 2 }}>
               ${wallet.balanceUsdc.toFixed(2)}
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>USDC · Base Sepolia</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>USDC · {network}</div>
+              {wallet.address && (
+                <button
+                  onClick={() => setShowFund(true)}
+                  style={{
+                    fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
+                    padding: "5px 12px", borderRadius: 99,
+                    background: "rgba(6,182,212,0.12)",
+                    border: "1px solid rgba(6,182,212,0.3)",
+                    color: "var(--cyan-400)", cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.2)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.12)"; }}
+                >
+                  + Fund Wallet
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Address */}
@@ -562,7 +807,18 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
           </div>
         </div>
       </div>
-      <style>{`@keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+      <style>{`
+        @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+      `}</style>
+      {showFund && (
+        <FundModal
+          wallet={wallet}
+          network={network}
+          onClose={() => setShowFund(false)}
+          onBalanceUpdate={onUpdate}
+        />
+      )}
     </>
   );
 }
@@ -570,7 +826,8 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
 /* ═══ Tabs ═══ */
 function OverviewTab() {
   const { data: wallets, loading: wl } = useApi<Wallet[]>("/api/wallets");
-  const { data: txns, loading: tl } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: txPage, loading: tl } = useApi<TxPage>("/api/transactions?limit=100", 30_000);
+  const txns = txPage?.items;
 
   if (wl || tl) return <Loader />;
 
@@ -690,10 +947,12 @@ function OverviewTab() {
 
 function WalletsTab() {
   const { data: wallets, loading, error, refetch } = useApi<Wallet[]>("/api/wallets", 30_000);
-  const { data: txns } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: txPage } = useApi<TxPage>("/api/transactions?limit=100", 30_000);
+  const txns = txPage?.items;
   const { data: policies } = useApi<Policy[]>("/api/policies");
   const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
   const [selected, setSelected] = useState<Wallet | null>(null);
+  const [fundingWallet, setFundingWallet] = useState<Wallet | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState("");
   const [newFunding, setNewFunding] = useState("10");
@@ -769,8 +1028,20 @@ function WalletsTab() {
                     <span>{p2pCount} P2P</span>
                     <span>${sent.toFixed(2)} sent</span>
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--violet-400)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                    View details →
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 11, color: "var(--violet-400)", fontWeight: 600 }}>View details →</div>
+                    {w.address && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setFundingWallet(w); }}
+                        style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                          padding: "4px 10px", borderRadius: 99,
+                          background: "rgba(6,182,212,0.08)",
+                          border: "1px solid rgba(6,182,212,0.2)",
+                          color: "var(--cyan-400)", cursor: "pointer",
+                        }}
+                      >+ Fund</button>
+                    )}
                   </div>
                 </GlassCard>
               </div>
@@ -807,17 +1078,27 @@ function WalletsTab() {
           onUpdate={refetch}
         />
       )}
+      {fundingWallet && (
+        <FundModal
+          wallet={fundingWallet}
+          network={system?.cdpNetwork ?? "base-sepolia"}
+          onClose={() => setFundingWallet(null)}
+          onBalanceUpdate={refetch}
+        />
+      )}
     </>
   );
 }
 
+interface TxPage { items: Tx[]; total: number; page: number; limit: number; pages: number; }
+
 function TransactionsTab() {
-  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
+  const [page, setPage] = useState(1);
   const [agentFilter, setAgentFilter] = useState("all");
-  const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [showSend, setShowSend] = useState(false);
   const [fromAgent, setFromAgent] = useState("");
   const [toAddr, setToAddr] = useState("");
@@ -826,7 +1107,17 @@ function TransactionsTab() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
 
+  const params = new URLSearchParams({ page: String(page), limit: "20" });
+  if (agentFilter !== "all") params.set("agentId", agentFilter);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  const { data, loading, error, refetch } = useApi<TxPage>(`/api/transactions?${params}`, 30_000);
+
+  const txns = data?.items ?? [];
   const agentIds = [...new Set((wallets ?? []).map((w) => w.agentId))];
+
+  // Reset to page 1 when filters change
+  const setAgent = (v: string) => { setAgentFilter(v); setPage(1); };
+  const setStatus = (v: string) => { setStatusFilter(v); setPage(1); };
 
   const sendTx = useCallback(async () => {
     if (!fromAgent || !toAddr || !amount) { setSendError("All fields required"); return; }
@@ -844,15 +1135,6 @@ function TransactionsTab() {
     } catch { setSendError("Network error"); }
     finally { setSending(false); }
   }, [fromAgent, toAddr, amount, category, refetch]);
-
-  if (loading) return <Loader />;
-  if (error) return <ErrorMsg message={error} />;
-
-  const filtered = (txns ?? []).filter((t) => {
-    const matchAgent = agentFilter === "all" || t.fromAgentId === agentFilter || t.toAgentId === agentFilter;
-    const matchStatus = statusFilter === "all" || t.status === statusFilter;
-    return matchAgent && matchStatus;
-  });
 
   const filterBtnStyle = (active: boolean) => ({
     padding: "5px 12px", borderRadius: 99, fontSize: 12, fontWeight: 600,
@@ -875,26 +1157,61 @@ function TransactionsTab() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Agent:</span>
             {["all", ...agentIds].map((id) => (
-              <button key={id} style={filterBtnStyle(agentFilter === id)} onClick={() => setAgentFilter(id)}>
+              <button key={id} style={filterBtnStyle(agentFilter === id)} onClick={() => setAgent(id)}>
                 {id === "all" ? "All" : id}
               </button>
             ))}
             <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
             <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Status:</span>
             {["all", "CONFIRMED", "PENDING", "FAILED", "REJECTED"].map((s) => (
-              <button key={s} style={filterBtnStyle(statusFilter === s)} onClick={() => setStatusFilter(s)}>
+              <button key={s} style={filterBtnStyle(statusFilter === s)} onClick={() => setStatus(s)}>
                 {s === "all" ? "All" : s}
               </button>
             ))}
           </div>
           <Btn onClick={() => setShowSend(true)}>+ Send Transaction</Btn>
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{filtered.length} of {txns?.length ?? 0} transactions</div>
-        {filtered.length === 0
+
+        {/* Count + pagination row */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+            {data ? `${data.total} total · page ${data.page} of ${data.pages}` : "Loading…"}
+          </div>
+          {data && data.pages > 1 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{
+                padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                background: "transparent", border: "1px solid var(--border)",
+                color: page === 1 ? "var(--text-tertiary)" : "var(--text)",
+                cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1,
+              }}>← Prev</button>
+              {Array.from({ length: Math.min(data.pages, 7) }, (_, i) => {
+                const p = data.pages <= 7 ? i + 1 : page <= 4 ? i + 1 : page >= data.pages - 3 ? data.pages - 6 + i : page - 3 + i;
+                return (
+                  <button key={p} onClick={() => setPage(p)} style={{
+                    width: 28, height: 28, borderRadius: 6, fontSize: 12, fontWeight: 600,
+                    background: p === page ? "rgba(139,92,246,0.12)" : "transparent",
+                    border: `1px solid ${p === page ? "var(--violet-500)" : "var(--border)"}`,
+                    color: p === page ? "var(--violet-300)" : "var(--text-tertiary)",
+                    cursor: "pointer",
+                  }}>{p}</button>
+                );
+              })}
+              <button onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={page === data.pages} style={{
+                padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                background: "transparent", border: "1px solid var(--border)",
+                color: page === data.pages ? "var(--text-tertiary)" : "var(--text)",
+                cursor: page === data.pages ? "not-allowed" : "pointer", opacity: page === data.pages ? 0.4 : 1,
+              }}>Next →</button>
+            </div>
+          )}
+        </div>
+
+        {loading ? <Loader /> : error ? <ErrorMsg message={error} /> : txns.length === 0
           ? <EmptyState icon="↗" title="No transactions found" sub="Try adjusting your filters, or send your first transaction" />
           : <DataTable
               headers={["From", "To", "Amount", "Category", "Status", "Hash", "Time"]}
-              rows={filtered.map((t) => [
+              rows={txns.map((t) => [
                 <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
                 <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
                 <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
@@ -943,7 +1260,8 @@ function TransactionsTab() {
 }
 
 function P2PTab() {
-  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: txPage, loading, error, refetch } = useApi<TxPage>("/api/transactions?limit=100", 30_000);
+  const txns = txPage?.items ?? [];
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const [showModal, setShowModal] = useState(false);
   const [from, setFrom] = useState("");
@@ -1266,7 +1584,8 @@ function X402Tab() {
 }
 
 function AnalyticsTab() {
-  const { data: txns, loading } = useApi<Tx[]>("/api/transactions");
+  const { data: txPage, loading } = useApi<TxPage>("/api/transactions?limit=100");
+  const txns = txPage?.items;
   const { data: wallets } = useApi<Wallet[]>("/api/wallets");
 
   if (loading) return <Loader />;
@@ -1686,7 +2005,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        <Link href="/docs" style={{ margin: "0 14px", padding: "9px 14px", borderRadius: "var(--radius-sm)", display: "block", background: "transparent", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", textDecoration: "none" }}
+        <Link href="/docs" style={{ margin: "0 14px 6px", padding: "9px 14px", borderRadius: "var(--radius-sm)", display: "block", background: "transparent", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", textDecoration: "none" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.borderColor = "var(--border)"; }}
         >API Docs →</Link>
@@ -1694,10 +2013,11 @@ export default function Dashboard() {
 
       {/* Main */}
       <main style={{ marginLeft: 230, flex: 1, padding: 32, position: "relative", zIndex: 2 }}>
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
             {tabList.find((t) => t.key === tab)?.label}
           </h1>
+          <WalletStatus />
         </div>
         {content[tab]}
       </main>

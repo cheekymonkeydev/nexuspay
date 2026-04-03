@@ -1,11 +1,123 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   NexusLogo, AmbientGlow, ConstellationNetwork,
   GlassCard, Section, GradientText, Badge, useScrollReveal,
 } from "@/components/shared";
+
+/* ═══════════════════════════════════════════════════════
+   SIWE helpers
+   ═══════════════════════════════════════════════════════ */
+function buildSiweMessage(address: string, nonce: string, domain: string, uri: string, chainId: number) {
+  return [
+    `${domain} wants you to sign in with your Ethereum account:`,
+    address, "",
+    "Sign in to NexusPay Dashboard", "",
+    `URI: ${uri}`, "Version: 1", `Chain ID: ${chainId}`,
+    `Nonce: ${nonce}`, `Issued At: ${new Date().toISOString()}`,
+  ].join("\n");
+}
+
+async function runSiwe(): Promise<string | null> {
+  const ethereum = (window as any).ethereum;
+  if (!ethereum) throw new Error("No wallet detected. Install MetaMask or Coinbase Wallet.");
+  const [account] = await ethereum.request({ method: "eth_requestAccounts" });
+  const chainHex: string = await ethereum.request({ method: "eth_chainId" });
+  const chainId = parseInt(chainHex, 16);
+  const { nonce } = await (await fetch("/api/auth/nonce")).json();
+  const message = buildSiweMessage(account, nonce, window.location.host, window.location.origin, chainId);
+  const signature = await ethereum.request({ method: "personal_sign", params: [message, account] });
+  const res = await fetch("/api/auth/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address: account, message, signature }),
+  });
+  // 501 = open mode (no JWT_SECRET) — no session cookie needed, proceed anyway
+  if (res.ok || res.status === 501) return account as string;
+  const { error } = await res.json().catch(() => ({ error: "Verification failed" }));
+  throw new Error(error ?? "Verification failed");
+}
+
+/* ═══════════════════════════════════════════════════════
+   Connect Wallet Button (nav)
+   ═══════════════════════════════════════════════════════ */
+function ConnectWalletBtn() {
+  const router = useRouter();
+  const [address, setAddress] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+
+  // Check for existing session on mount
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.address) setAddress(d.address); })
+      .catch(() => {});
+  }, []);
+
+  const connect = useCallback(async () => {
+    setLoading(true);
+    setErrMsg("");
+    try {
+      const addr = await runSiwe();
+      if (addr) {
+        setAddress(addr);
+        router.push("/dashboard");
+      }
+    } catch (e: any) {
+      // code 4001 = user rejected — silent
+      if (e?.code !== 4001) setErrMsg(e?.message ?? "Connection failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  const hoverOn = (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; };
+  const hoverOff = (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; };
+
+  const baseBtnStyle = {
+    padding: "9px 22px", borderRadius: 99,
+    background: "var(--gradient-brand)",
+    color: "white", fontSize: 13, fontWeight: 600,
+    display: "flex", alignItems: "center", gap: 8,
+    transition: "transform 0.25s, box-shadow 0.25s",
+    border: "none", cursor: "pointer", textDecoration: "none",
+  } as const;
+
+  // Already connected — show address pill
+  if (address) {
+    return (
+      <Link href="/dashboard" style={baseBtnStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan-400)", flexShrink: 0 }} />
+        {address.slice(0, 6)}…{address.slice(-4)}
+      </Link>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+      <button onClick={connect} disabled={loading} style={{
+        ...baseBtnStyle,
+        background: loading ? "rgba(139,92,246,0.35)" : "var(--gradient-brand)",
+        cursor: loading ? "wait" : "pointer",
+        opacity: loading ? 0.8 : 1,
+      }}
+      onMouseEnter={(e) => { if (!loading) hoverOn(e); }}
+      onMouseLeave={hoverOff}
+      >
+        {loading && <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite", display: "inline-block", flexShrink: 0 }} />}
+        {loading ? "Check wallet…" : "Connect Wallet"}
+      </button>
+      {errMsg && (
+        <div style={{ fontSize: 11, color: "#f87171", maxWidth: 220, textAlign: "right", lineHeight: 1.4 }}>{errMsg}</div>
+      )}
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════
    Animated counter — counts up on scroll
@@ -455,7 +567,7 @@ export default function LandingPage() {
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>NexusPay</span>
         </Link>
         <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
-          {["Features", "How It Works", "Use Cases", "SDK"].map((item) => (
+          {["Features", "How It Works", "Use Cases", "SDK", "AgentKit"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -476,15 +588,7 @@ export default function LandingPage() {
           onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
           >Docs</Link>
-          <Link href="/dashboard" style={{
-            padding: "9px 22px", borderRadius: 99,
-            background: "var(--gradient-brand)",
-            color: "white", fontSize: 13, fontWeight: 600,
-            transition: "transform 0.25s ease, box-shadow 0.25s ease",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-          >Dashboard</Link>
+          <ConnectWalletBtn />
         </div>
       </nav>
 
@@ -915,6 +1019,157 @@ export default function LandingPage() {
                 color: "var(--text-secondary)",
               }}>{pill}</div>
             ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* ═══ AgentKit ═══ */}
+      <Section id="agentkit" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="cyan">Coinbase AgentKit</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            Native <GradientText>AgentKit</GradientText> integration
+          </h2>
+          <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 16, maxWidth: 560, margin: "12px auto 0" }}>
+            One import gives your AgentKit agent 9 payment actions — wallets, policies, P2P transfers, and x402 micropayments.
+          </p>
+        </div>
+
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          {/* Install command */}
+          <div data-reveal style={{
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            background: "rgba(9,9,15,0.9)",
+            overflow: "hidden",
+            backdropFilter: "blur(20px)",
+            marginBottom: 24,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 20px",
+              borderBottom: "1px solid var(--border-subtle)",
+              background: "rgba(15,15,24,0.6)",
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>TERMINAL</span>
+              <a
+                href="https://www.npmjs.com/package/nexuspay-agentkit"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "4px 12px", borderRadius: 99,
+                  background: "rgba(6,182,212,0.08)",
+                  border: "1px solid rgba(6,182,212,0.2)",
+                  fontSize: 11, fontWeight: 600, color: "var(--cyan-400)",
+                  fontFamily: "var(--font-mono)",
+                  transition: "background 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(6,182,212,0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(6,182,212,0.08)")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3v4M8 3v4M16 17v4M8 17v4"/></svg>
+                npm
+              </a>
+            </div>
+            <pre style={{
+              padding: "20px 24px",
+              fontFamily: "var(--font-mono)", fontSize: 15, lineHeight: 1.6,
+              color: "var(--cyan-400)", margin: 0,
+            }}>
+              <span style={{ color: "var(--text-tertiary)", userSelect: "none" }}>$ </span>
+              npm install nexuspay-agentkit @coinbase/agentkit
+            </pre>
+          </div>
+
+          {/* Code example */}
+          <div data-reveal data-reveal-delay="100" style={{
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            background: "rgba(9,9,15,0.9)",
+            overflow: "hidden",
+            backdropFilter: "blur(20px)",
+            marginBottom: 32,
+          }}>
+            <div style={{
+              padding: "10px 20px",
+              borderBottom: "1px solid var(--border-subtle)",
+              background: "rgba(15,15,24,0.6)",
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em", textTransform: "uppercase" }}>TypeScript</span>
+            </div>
+            <pre style={{
+              padding: "24px",
+              fontFamily: "var(--font-mono)", fontSize: 13, lineHeight: 1.75,
+              color: "var(--violet-200)", margin: 0, overflowX: "auto",
+            }}>{`import { AgentKit } from "@coinbase/agentkit";
+import { nexusPayActionProvider } from "nexuspay-agentkit";
+
+const agentKit = await AgentKit.from({
+  cdpApiKeyName: process.env.CDP_API_KEY_NAME!,
+  cdpApiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
+  actionProviders: [
+    nexusPayActionProvider({
+      baseUrl: process.env.NEXUSPAY_URL!,
+      apiKey: process.env.NEXUSPAY_API_KEY!,
+    }),
+  ],
+});
+
+// Your agent now understands natural language payments:
+// "Transfer $5 to agent-writer for the article it generated"
+// "Check agent-alpha's balance before approving the request"
+// "Pay the inference API at /api/premium/gpt4"
+// "Set a $10 daily spending limit on agent-beta"`}</pre>
+          </div>
+
+          {/* Action grid */}
+          <div data-reveal data-reveal-delay="160" style={{
+            display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12,
+            marginBottom: 32,
+          }}>
+            {[
+              { action: "nexuspay_get_balance", desc: "Check wallet balance" },
+              { action: "nexuspay_create_wallet", desc: "Provision agent wallet" },
+              { action: "nexuspay_send_payment", desc: "On-chain USDC payment" },
+              { action: "nexuspay_p2p_transfer", desc: "Instant agent transfer" },
+              { action: "nexuspay_pay_x402", desc: "Auto-pay HTTP 402" },
+              { action: "nexuspay_create_policy", desc: "Set spending limits" },
+              { action: "nexuspay_check_policies", desc: "Audit spending rules" },
+              { action: "nexuspay_list_transactions", desc: "Transaction history" },
+              { action: "nexuspay_list_wallets", desc: "List all wallets" },
+            ].map(({ action, desc }) => (
+              <div key={action} style={{
+                padding: "14px 16px",
+                borderRadius: "var(--radius-md)",
+                background: "rgba(139,92,246,0.04)",
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--cyan-400)", fontWeight: 600, marginBottom: 4 }}>{action}</div>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div data-reveal data-reveal-delay="200" style={{ textAlign: "center" }}>
+            <a
+              href="/docs#agentkit"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "10px 24px", borderRadius: 99,
+                border: "1px solid rgba(6,182,212,0.3)",
+                background: "rgba(6,182,212,0.06)",
+                fontSize: 13, fontWeight: 600, color: "var(--cyan-400)",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.12)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.5)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.06)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.3)"; }}
+            >
+              View AgentKit docs →
+            </a>
           </div>
         </div>
       </Section>

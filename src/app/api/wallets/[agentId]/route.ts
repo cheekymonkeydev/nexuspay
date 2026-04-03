@@ -3,6 +3,19 @@ import { prisma } from "@/lib/db";
 import { ok, err, handleError } from "@/lib/utils";
 import { authenticate } from "@/lib/auth";
 
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
+) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
+  try {
+    const { agentId } = await params;
+    const wallet = await prisma.agentWallet.findUnique({ where: { agentId } });
+    if (!wallet) return err("Wallet not found", 404);
+    return ok(wallet);
+  } catch (e) { return handleError(e); }
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }

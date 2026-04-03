@@ -1,0 +1,27 @@
+import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
+
+export async function middleware(req: NextRequest) {
+  // Open mode — no JWT_SECRET configured, allow everything through
+  if (!process.env.JWT_SECRET) return NextResponse.next();
+
+  const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+  const cookie = req.cookies.get("nexus_session")?.value;
+
+  if (cookie) {
+    try {
+      await jwtVerify(cookie, secret);
+      return NextResponse.next();
+    } catch {
+      // Expired or tampered — fall through to redirect
+    }
+  }
+
+  const homeUrl = new URL("/", req.url);
+  homeUrl.searchParams.set("connect", "1");
+  return NextResponse.redirect(homeUrl);
+}
+
+export const config = {
+  matcher: ["/dashboard/:path*"],
+};

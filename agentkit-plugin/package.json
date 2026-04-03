@@ -1,0 +1,36 @@
+{
+  "name": "nexuspay-agentkit",
+  "version": "0.1.0",
+  "description": "NexusPay action provider for Coinbase AgentKit — managed USDC wallets, spending policies, and x402 micropayments for AI agents",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["coinbase", "agentkit", "nexuspay", "ai-agents", "usdc", "payments", "web3", "x402", "base"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@coinbase/agentkit": ">=0.10.0",
+    "zod": ">=3.0.0"
+  },
+  "dependencies": {
+    "nexuspay-sdk": "^0.1.0",
+    "reflect-metadata": "^0.2.0"
+  },
+  "devDependencies": {
+    "@coinbase/agentkit": "^0.10.4",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "zod": "^3.0.0"
+  }
+}
