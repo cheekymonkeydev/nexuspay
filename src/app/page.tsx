@@ -175,6 +175,123 @@ function CodeDemo() {
 }
 
 /* ═══════════════════════════════════════════════════════
+   SDK Demo — tabbed code examples
+   ═══════════════════════════════════════════════════════ */
+const sdkExamples: Record<string, string> = {
+  "Initialize": `import NexusPay from "nexuspay-sdk";
+
+const nexus = new NexusPay({
+  baseUrl: "https://your-nexuspay.vercel.app",
+  apiKey: process.env.NEXUSPAY_API_KEY,
+});`,
+
+  "Create Wallet": `const wallet = await nexus.wallets.create({
+  agentId: "agent-gpt4",
+  name: "GPT-4 Research Agent",
+  initialFunding: 50.00,
+});
+
+console.log(wallet.address);
+// → 0x7a3f...8b2c
+console.log(wallet.balanceUsdc);
+// → 50.00`,
+
+  "Send USDC": `const tx = await nexus.transactions.send({
+  fromAgentId: "agent-gpt4",
+  toAddress: "0x9b2e...4d1a",
+  amountUsdc: 12.50,
+  category: "compute",
+  memo: "GPU inference payment",
+});
+
+// Policy-checked, on-chain settled
+console.log(tx.status);   // → "CONFIRMED"
+console.log(tx.txHash);   // → "0x8f2a..."`,
+
+  "P2P Transfer": `// Instant agent-to-agent transfer
+// No gas, atomic balance swap
+const result = await nexus.p2p.transfer({
+  fromAgentId: "agent-gpt4",
+  toAgentId:   "agent-claude",
+  amountUsdc:  5.00,
+  memo:        "Tool access fee",
+});
+
+console.log(result.isP2P);  // → true
+console.log(result.status); // → "CONFIRMED"`,
+
+  "Set Policy": `const policy = await nexus.policies.create({
+  agentId: "agent-gpt4",
+  tier: "MODERATE",
+  maxPerTransaction: 25.00,
+  dailyLimit: 200.00,
+  monthlyLimit: 2000.00,
+  requireApproval: false,
+  allowedCategories: ["compute", "storage"],
+});`,
+};
+
+function SdkDemo() {
+  const tabs = Object.keys(sdkExamples);
+  const [active, setActive] = useState(tabs[0]);
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(sdkExamples[active]);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{
+      borderRadius: "var(--radius-lg)",
+      border: "1px solid var(--border)",
+      background: "rgba(9,9,15,0.9)",
+      overflow: "hidden",
+      backdropFilter: "blur(20px)",
+    }}>
+      {/* Tab bar */}
+      <div style={{
+        display: "flex", borderBottom: "1px solid var(--border-subtle)",
+        background: "rgba(15,15,24,0.6)",
+        overflowX: "auto",
+      }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActive(tab)}
+            style={{
+              padding: "13px 18px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap",
+              color: active === tab ? "var(--violet-300)" : "var(--text-tertiary)",
+              borderBottom: active === tab ? "2px solid var(--violet-500)" : "2px solid transparent",
+              transition: "all 0.25s ease",
+            }}
+          >{tab}</button>
+        ))}
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={copy}
+          style={{
+            padding: "13px 18px", fontSize: 12, fontWeight: 500,
+            color: copied ? "var(--cyan-400)" : "var(--text-tertiary)",
+            transition: "color 0.2s",
+          }}
+        >{copied ? "Copied!" : "Copy"}</button>
+      </div>
+      {/* Code */}
+      <pre style={{
+        padding: "24px 28px",
+        fontFamily: "var(--font-mono)", fontSize: 13, lineHeight: 1.8,
+        color: "var(--violet-200)", minHeight: 200, margin: 0,
+        overflowX: "auto",
+      }}>
+        {sdkExamples[active]}
+      </pre>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
    FAQ Accordion
    ═══════════════════════════════════════════════════════ */
 function FAQ() {
@@ -310,7 +427,6 @@ const steps = [
    ═══════════════════════════════════════════════════════ */
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
-  const [email, setEmail] = useState("");
   useScrollReveal();
 
   useEffect(() => {
@@ -339,7 +455,7 @@ export default function LandingPage() {
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>NexusPay</span>
         </Link>
         <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
-          {["Features", "How It Works", "Use Cases"].map((item) => (
+          {["Features", "How It Works", "Use Cases", "SDK"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -392,7 +508,7 @@ export default function LandingPage() {
             color: "var(--violet-300)", marginBottom: 28,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-400)" }} />
-            USDC ON BASE &middot; LIVE ON TESTNET
+            USDC ON BASE &middot; LIVE ON MAINNET
           </div>
 
           <h1 data-reveal data-reveal-delay="80" style={{
@@ -708,6 +824,98 @@ export default function LandingPage() {
               </GlassCard>
             </div>
           ))}
+        </div>
+      </Section>
+
+      {/* ═══ SDK ═══ */}
+      <Section id="sdk" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="violet">TypeScript SDK</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            Install and start in <GradientText>30 seconds</GradientText>
+          </h2>
+          <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 16, maxWidth: 540, margin: "12px auto 0" }}>
+            Full TypeScript types, CJS + ESM, works in Node, Bun, and edge runtimes.
+          </p>
+        </div>
+
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          {/* Install command */}
+          <div data-reveal style={{
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            background: "rgba(9,9,15,0.9)",
+            overflow: "hidden",
+            backdropFilter: "blur(20px)",
+            marginBottom: 24,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 20px",
+              borderBottom: "1px solid var(--border-subtle)",
+              background: "rgba(15,15,24,0.6)",
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>TERMINAL</span>
+              <a
+                href="https://www.npmjs.com/package/nexuspay-sdk"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "4px 12px", borderRadius: 99,
+                  background: "rgba(139,92,246,0.08)",
+                  border: "1px solid rgba(139,92,246,0.2)",
+                  fontSize: 11, fontWeight: 600, color: "var(--violet-300)",
+                  fontFamily: "var(--font-mono)",
+                  transition: "background 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.08)")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3v4M8 3v4M16 17v4M8 17v4"/></svg>
+                npm
+              </a>
+            </div>
+            <pre style={{
+              padding: "20px 24px",
+              fontFamily: "var(--font-mono)", fontSize: 15, lineHeight: 1.6,
+              color: "var(--cyan-400)", margin: 0,
+            }}>
+              <span style={{ color: "var(--text-tertiary)", userSelect: "none" }}>$ </span>
+              npm install nexuspay-sdk
+            </pre>
+          </div>
+
+          {/* Code tabs */}
+          <div data-reveal data-reveal-delay="100">
+            <SdkDemo />
+          </div>
+
+          {/* Feature pills */}
+          <div data-reveal data-reveal-delay="160" style={{
+            display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center",
+            marginTop: 32,
+          }}>
+            {[
+              "Full TypeScript types",
+              "CJS + ESM",
+              "Node / Bun / Edge",
+              "Zero dependencies",
+              "Works with fetch API",
+              "Auto-typed responses",
+            ].map((pill) => (
+              <div key={pill} style={{
+                padding: "6px 16px", borderRadius: 99,
+                background: "rgba(139,92,246,0.05)",
+                border: "1px solid var(--border)",
+                fontSize: 12, fontWeight: 500,
+                color: "var(--text-secondary)",
+              }}>{pill}</div>
+            ))}
+          </div>
         </div>
       </Section>
 
