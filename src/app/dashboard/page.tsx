@@ -1410,7 +1410,7 @@ function ApiKeysTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>API Keys</h3>
-          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Keys authenticate programmatic access via the <span style={{ fontFamily: "var(--font-mono)" }}>X-Api-Key</span> header.</p>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Create a key to connect AI agents or external services to NexusPay. Pass it in every request as <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>X-Api-Key: nxp_…</span></p>
         </div>
         <button onClick={() => { setShowCreate(true); setNewKey(null); }} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
           + Create Key
@@ -1442,6 +1442,30 @@ function ApiKeysTab() {
             : <span key="revoked" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</span>,
         ])}
       />
+
+      {(keys ?? []).length === 0 && !newKey && (
+        <EmptyState icon="⌗" title="No API keys yet" sub='Click "+ Create Key" to generate your first key and connect an agent or service' />
+      )}
+
+      <GlassCard style={{ padding: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 12 }}>How to connect</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[
+            { label: "1. Create a key above, copy it immediately", code: null },
+            { label: "2. Pass it in every API request header:", code: "X-Api-Key: nxp_your_key_here" },
+            { label: "3. Or use the TypeScript SDK:", code: `new NexusPay({ baseUrl: "https://nexuspay.finance", apiKey: "nxp_…" })` },
+          ].map(({ label, code }) => (
+            <div key={label}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: code ? 4 : 0 }}>{label}</div>
+              {code && (
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, padding: "8px 12px", borderRadius: 6, background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.12)", color: "var(--violet-300)", wordBreak: "break-all" }}>
+                  {code}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </GlassCard>
 
       {showCreate && !newKey && (
         <Modal title="Create API Key" onClose={() => setShowCreate(false)}>
