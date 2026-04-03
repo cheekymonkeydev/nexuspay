@@ -35,28 +35,73 @@ interface ApiKey {
   isActive: boolean; lastUsedAt: string | null; createdAt: string;
 }
 
-/* ═══ Sign out ═══ */
-function SignOutBtn() {
-  const [loading, setLoading] = useState(false);
-  const signOut = async () => {
-    setLoading(true);
+/* ═══ Wallet status (top-right header) ═══ */
+function WalletStatus() {
+  const [address, setAddress] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.address) setAddress(d.address);
+    });
+  }, []);
+
+  const disconnect = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    window.location.href = "/";
   };
+
+  // Open mode or not connected — show nothing
+  if (!address) return null;
+
   return (
-    <button
-      onClick={signOut}
-      disabled={loading}
-      style={{
-        margin: "0 14px 16px", padding: "9px 14px",
-        borderRadius: "var(--radius-sm)", width: "calc(100% - 28px)",
-        background: "transparent", border: "1px solid var(--border)",
-        fontSize: 12, color: "var(--text-tertiary)",
-        fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(248,113,113,0.3)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.borderColor = "var(--border)"; }}
-    >{loading ? "Signing out…" : "Sign out"}</button>
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "8px 16px", borderRadius: 99,
+          background: "rgba(139,92,246,0.08)",
+          border: "1px solid rgba(139,92,246,0.2)",
+          color: "var(--violet-300)", fontSize: 13, fontWeight: 600,
+          fontFamily: "var(--font-mono)", cursor: "pointer",
+          transition: "all 0.2s",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.14)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.08)"; }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan-400)", boxShadow: "0 0 6px var(--cyan-400)" }} />
+        {address.slice(0, 6)}…{address.slice(-4)}
+        <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>
+      </button>
+
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setOpen(false)} />
+          <div style={{
+            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 100,
+            background: "rgba(13,13,20,0.98)", border: "1px solid var(--border-hover)",
+            borderRadius: "var(--radius-md)", padding: 6, minWidth: 180,
+            boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          }}>
+            <div style={{ padding: "8px 12px", fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", borderBottom: "1px solid var(--border-subtle)", marginBottom: 4 }}>
+              {address}
+            </div>
+            <button
+              onClick={disconnect}
+              style={{
+                width: "100%", textAlign: "left", padding: "9px 12px",
+                borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 500,
+                color: "#f87171", background: "transparent", border: "none",
+                cursor: "pointer", transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >Disconnect</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1715,15 +1760,15 @@ export default function Dashboard() {
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.borderColor = "var(--border)"; }}
         >API Docs →</Link>
-        <SignOutBtn />
       </aside>
 
       {/* Main */}
       <main style={{ marginLeft: 230, flex: 1, padding: 32, position: "relative", zIndex: 2 }}>
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
             {tabList.find((t) => t.key === tab)?.label}
           </h1>
+          <WalletStatus />
         </div>
         {content[tab]}
       </main>

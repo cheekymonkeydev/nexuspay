@@ -1,11 +1,101 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   NexusLogo, AmbientGlow, ConstellationNetwork,
   GlassCard, Section, GradientText, Badge, useScrollReveal,
 } from "@/components/shared";
+
+/* ═══════════════════════════════════════════════════════
+   SIWE helpers
+   ═══════════════════════════════════════════════════════ */
+function buildSiweMessage(address: string, nonce: string, domain: string, uri: string) {
+  return [
+    `${domain} wants you to sign in with your Ethereum account:`,
+    address, "",
+    "Sign in to NexusPay Dashboard", "",
+    `URI: ${uri}`, "Version: 1", "Chain ID: 8453",
+    `Nonce: ${nonce}`, `Issued At: ${new Date().toISOString()}`,
+  ].join("\n");
+}
+
+async function runSiwe(): Promise<string | null> {
+  const ethereum = (window as any).ethereum;
+  if (!ethereum) return null;
+  const [account] = await ethereum.request({ method: "eth_requestAccounts" });
+  const { nonce } = await (await fetch("/api/auth/nonce")).json();
+  const message = buildSiweMessage(account, nonce, window.location.host, window.location.origin);
+  const signature = await ethereum.request({ method: "personal_sign", params: [message, account] });
+  const res = await fetch("/api/auth/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address: account, message, signature }),
+  });
+  if (!res.ok) return null;
+  return account as string;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Connect Wallet Button (nav)
+   ═══════════════════════════════════════════════════════ */
+function ConnectWalletBtn() {
+  const router = useRouter();
+  const [address, setAddress] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.address) setAddress(d.address);
+    });
+  }, []);
+
+  const connect = useCallback(async () => {
+    setLoading(true);
+    try {
+      const addr = await runSiwe();
+      if (addr) { setAddress(addr); router.push("/dashboard"); }
+    } catch { /* user rejected */ }
+    finally { setLoading(false); }
+  }, [router]);
+
+  if (address) {
+    return (
+      <Link href="/dashboard" style={{
+        padding: "9px 22px", borderRadius: 99,
+        background: "var(--gradient-brand)",
+        color: "white", fontSize: 13, fontWeight: 600,
+        display: "flex", alignItems: "center", gap: 8,
+        transition: "transform 0.25s, box-shadow 0.25s",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan-400)", flexShrink: 0 }} />
+        {address.slice(0, 6)}…{address.slice(-4)}
+      </Link>
+    );
+  }
+
+  return (
+    <button onClick={connect} disabled={loading} style={{
+      padding: "9px 22px", borderRadius: 99,
+      background: loading ? "rgba(139,92,246,0.3)" : "var(--gradient-brand)",
+      color: "white", fontSize: 13, fontWeight: 600,
+      border: "none", cursor: loading ? "wait" : "pointer",
+      display: "flex", alignItems: "center", gap: 8,
+      transition: "transform 0.25s, box-shadow 0.25s",
+    }}
+    onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; } }}
+    onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+    >
+      {loading && <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite", display: "inline-block" }} />}
+      {loading ? "Check wallet…" : "Connect Wallet"}
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </button>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════
    Animated counter — counts up on scroll
@@ -476,15 +566,7 @@ export default function LandingPage() {
           onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
           >Docs</Link>
-          <Link href="/dashboard" style={{
-            padding: "9px 22px", borderRadius: 99,
-            background: "var(--gradient-brand)",
-            color: "white", fontSize: 13, fontWeight: 600,
-            transition: "transform 0.25s ease, box-shadow 0.25s ease",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-          >Dashboard</Link>
+          <ConnectWalletBtn />
         </div>
       </nav>
 

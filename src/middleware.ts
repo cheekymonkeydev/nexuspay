@@ -17,9 +17,9 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  const loginUrl = new URL("/login", req.url);
-  loginUrl.searchParams.set("next", req.nextUrl.pathname);
-  return NextResponse.redirect(loginUrl);
+  const homeUrl = new URL("/", req.url);
+  homeUrl.searchParams.set("connect", "1");
+  return NextResponse.redirect(homeUrl);
 }
 
 export const config = {
