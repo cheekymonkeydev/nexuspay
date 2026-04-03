@@ -3,29 +3,12 @@
 import { useEffect, useRef, useCallback } from "react";
 
 /* ═══════════════════════════════════════════════════════
-   NexusPay Logo — Abstract N with payment flow arrow
+   NexusPay Logo
    ═══════════════════════════════════════════════════════ */
 export function NexusLogo({ size = 32 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-      <defs>
-        <linearGradient id="nexus-grad" x1="0" y1="0" x2="40" y2="40">
-          <stop offset="0%" stopColor="#8b5cf6" />
-          <stop offset="100%" stopColor="#06b6d4" />
-        </linearGradient>
-        <linearGradient id="nexus-bg" x1="0" y1="0" x2="40" y2="40">
-          <stop offset="0%" stopColor="#1a1a28" />
-          <stop offset="100%" stopColor="#13131d" />
-        </linearGradient>
-      </defs>
-      <rect width="40" height="40" rx="11" fill="url(#nexus-bg)" stroke="url(#nexus-grad)" strokeWidth="1" strokeOpacity="0.3" />
-      <path d="M12 29V11" stroke="#F0EDE8" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M12 11L28 29" stroke="url(#nexus-grad)" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M28 11V29" stroke="#F0EDE8" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M24.5 24.5L28 29L23.5 27" stroke="url(#nexus-grad)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="11" r="2" fill="#8b5cf6" />
-      <circle cx="28" cy="29" r="2" fill="#06b6d4" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/logo.png" alt="NexusPay" width={size} height={size} style={{ borderRadius: size * 0.27, display: "block" }} />
   );
 }
 
