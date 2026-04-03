@@ -754,31 +754,27 @@ export default function LandingPage() {
               Ready to build the <GradientText>agent economy</GradientText>?
             </h2>
             <p style={{ color: "var(--text-secondary)", marginBottom: 28, fontSize: 15 }}>
-              Join builders shipping agent payment infrastructure today.
+              Start building agent payment infrastructure today.
             </p>
-            <div style={{ display: "flex", gap: 8, maxWidth: 400, margin: "0 auto" }}>
-              <input
-                type="email" placeholder="you@agent.dev"
-                value={email} onChange={(e) => setEmail(e.target.value)}
-                style={{
-                  flex: 1, padding: "12px 18px", borderRadius: 99,
-                  background: "rgba(9,9,15,0.6)", border: "1px solid var(--border)",
-                  color: "var(--text)", fontSize: 14, outline: "none",
-                  fontFamily: "var(--font-body)",
-                  transition: "border-color 0.2s",
-                }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--violet-500)")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-              />
-              <button style={{
-                padding: "12px 28px", borderRadius: 99,
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              <Link href="/dashboard" style={{
+                padding: "12px 32px", borderRadius: 99,
                 background: "var(--gradient-brand)",
                 color: "white", fontWeight: 700, fontSize: 14,
                 transition: "transform 0.2s, box-shadow 0.2s",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 20px var(--glow-violet)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-              >Join Waitlist</button>
+              >Open Dashboard</Link>
+              <Link href="/docs" style={{
+                padding: "12px 32px", borderRadius: 99,
+                border: "1px solid var(--border-hover)",
+                color: "var(--text)", fontWeight: 600, fontSize: 14,
+                transition: "background 0.2s, border-color 0.2s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.06)"; e.currentTarget.style.borderColor = "var(--violet-400)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "var(--border-hover)"; }}
+              >View Docs</Link>
             </div>
           </div>
         </div>
