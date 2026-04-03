@@ -4,31 +4,39 @@ import { prisma } from "./db";
 import { sha256 } from "./utils";
 
 const jwtSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET ?? "nexuspay-dev-secret-change-in-production"
-  );
+  new TextEncoder().encode(process.env.JWT_SECRET ?? "");
 
 /**
- * Authenticate a request via:
- *  1. nexus_session cookie (dashboard UI — JWT signed by DASHBOARD_PASSWORD flow)
- *  2. X-Api-Key header (programmatic agent access — DB-verified key)
- *  3. Dev bypass — only when NODE_ENV=development and no secrets are configured
+ * Authentication is opt-in — controlled by environment variables.
  *
- * Returns an auth context object on success, null on failure.
+ * Open mode (default):   JWT_SECRET not set → all requests pass through.
+ *                        Safe for development and single-operator deployments.
+ *
+ * Protected mode:        JWT_SECRET set → requires either:
+ *                          1. nexus_session cookie (dashboard session from a login provider)
+ *                          2. X-Api-Key header (programmatic agent access, DB-verified)
+ *
+ * To add proper multi-tenant auth later, integrate Clerk or NextAuth and
+ * have them issue the nexus_session cookie on sign-in.
  */
 export async function authenticate(req: NextRequest) {
-  // 1. Session cookie (dashboard calls)
+  // Open mode — no auth configured
+  if (!process.env.JWT_SECRET) {
+    return { id: "open", name: "open", scopes: ["*"] as string[] };
+  }
+
+  // 1. Session cookie (dashboard UI / Clerk / NextAuth)
   const cookie = req.cookies.get("nexus_session")?.value;
   if (cookie) {
     try {
       await jwtVerify(cookie, jwtSecret());
       return { id: "session", name: "dashboard", scopes: ["*"] as string[] };
     } catch {
-      // Invalid or expired — fall through
+      // Expired or invalid
     }
   }
 
-  // 2. API key header (programmatic)
+  // 2. X-Api-Key header (programmatic agent access)
   const apiKey = req.headers.get("x-api-key");
   if (apiKey) {
     const keyHash = await sha256(apiKey);
@@ -42,15 +50,8 @@ export async function authenticate(req: NextRequest) {
         return key;
       }
     } catch {
-      // DB error — fall through
+      // DB error
     }
-  }
-
-  // 3. Dev bypass when no secrets are configured
-  const inDev = process.env.NODE_ENV !== "production";
-  const noSecrets = !process.env.JWT_SECRET && !process.env.API_SECRET_KEY;
-  if (inDev && noSecrets) {
-    return { id: "dev", name: "development", scopes: ["*"] as string[] };
   }
 
   return null;
