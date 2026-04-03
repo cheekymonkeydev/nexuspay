@@ -412,7 +412,7 @@ export default function LandingPage() {
             maxWidth: 560, margin: "0 auto 40px",
           }}>
             Managed wallets, spending policies, and real USDC settlement on Base.
-            P2P transfers, micropayments, and x402 paywalls — one API.
+            P2P transfers, micropayments, and x402 paywalls, one API.
           </p>
 
           <div data-reveal data-reveal-delay="240" style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
