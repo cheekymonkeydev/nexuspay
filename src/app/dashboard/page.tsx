@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { NexusLogo, AmbientGlow, GlassCard, Badge, useScrollReveal } from "@/components/shared";
 import { useApi } from "@/lib/hooks";
@@ -324,6 +324,161 @@ function Input({ value, onChange, placeholder, type = "text" }: {
 }
 
 /* ═══ Wallet Detail Drawer ═══ */
+/* ─── Fund Wallet Modal ───────────────────────────────── */
+function FundModal({ wallet, network, onClose, onBalanceUpdate }: {
+  wallet: Wallet; network: string; onClose: () => void; onBalanceUpdate: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [balance, setBalance] = useState(wallet.balanceUsdc);
+  const [detected, setDetected] = useState(false);
+  const prevBalanceRef = useRef(wallet.balanceUsdc);
+
+  // Generate QR code on mount
+  useEffect(() => {
+    if (!wallet.address || !canvasRef.current) return;
+    import("qrcode").then((QRCode) => {
+      QRCode.toCanvas(canvasRef.current!, wallet.address, {
+        width: 200, margin: 2,
+        color: { dark: "#a78bfa", light: "#0a0a12" },
+      });
+    });
+  }, [wallet.address]);
+
+  // Poll balance every 5s
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/wallets/${wallet.agentId}`);
+        const json = await res.json();
+        const newBal: number = json.data?.balanceUsdc ?? json.balanceUsdc ?? prevBalanceRef.current;
+        if (newBal > prevBalanceRef.current) {
+          setDetected(true);
+          onBalanceUpdate();
+        }
+        prevBalanceRef.current = newBal;
+        setBalance(newBal);
+      } catch { /* ignore */ }
+    };
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, [wallet.agentId, onBalanceUpdate]);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const basescanUrl = network.includes("mainnet") || network === "base"
+    ? `https://basescan.org/address/${wallet.address}`
+    : `https://sepolia.basescan.org/address/${wallet.address}`;
+
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }} onClick={onClose} />
+      <div style={{
+        position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+        zIndex: 201, width: 400, maxWidth: "95vw",
+        background: "rgba(10,10,18,0.99)", backdropFilter: "blur(24px)",
+        border: "1px solid rgba(139,92,246,0.25)",
+        borderRadius: "var(--radius-xl)",
+        padding: 32,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
+      }}>
+        {/* Header */}
+        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em" }}>Fund Wallet</div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>{wallet.agentId}</div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 30, height: 30, borderRadius: "50%", fontSize: 18,
+            color: "var(--text-tertiary)", background: "rgba(255,255,255,0.05)",
+            border: "1px solid var(--border)", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>×</button>
+        </div>
+
+        {/* QR Code */}
+        <div style={{
+          padding: 12, borderRadius: "var(--radius-md)",
+          background: "#0a0a12", border: "1px solid rgba(139,92,246,0.2)",
+        }}>
+          <canvas ref={canvasRef} style={{ display: "block", borderRadius: 6 }} />
+        </div>
+
+        {/* Instruction */}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            Send <strong style={{ color: "var(--text)" }}>USDC</strong> on <strong style={{ color: "var(--violet-300)" }}>Base</strong> to this address.
+            Balance updates automatically every 5 seconds.
+          </div>
+        </div>
+
+        {/* Address */}
+        <div style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 8,
+          padding: "12px 14px",
+          background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, flex: 1, color: "var(--text-secondary)", wordBreak: "break-all", lineHeight: 1.5 }}>
+            {wallet.address}
+          </span>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <CopyBtn text={wallet.address} />
+            <a href={basescanUrl} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+              color: "var(--cyan-400)", background: "rgba(6,182,212,0.08)",
+              border: "1px solid rgba(6,182,212,0.2)",
+              padding: "3px 9px", borderRadius: 5, textDecoration: "none",
+            }}>↗</a>
+          </div>
+        </div>
+
+        {/* Live balance */}
+        <div style={{
+          width: "100%", padding: "16px 20px", borderRadius: "var(--radius-md)",
+          background: detected
+            ? "linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(139,92,246,0.06) 100%)"
+            : "rgba(255,255,255,0.02)",
+          border: `1px solid ${detected ? "rgba(6,182,212,0.35)" : "var(--border)"}`,
+          transition: "all 0.4s ease",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 4 }}>
+              Current Balance
+            </div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: detected ? "var(--cyan-400)" : "var(--text)" }}>
+              ${balance.toFixed(2)}
+            </div>
+          </div>
+          {detected ? (
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan-400)", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 16 }}>✓</span> Funds detected!
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: "var(--text-tertiary)",
+                  animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                }} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.5 }}>
+          Only send USDC on Base. Other tokens or networks will be lost.
+        </div>
+      </div>
+    </>
+  );
+}
+
 function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
   wallet: Wallet; txns: Tx[]; policies: Policy[]; network: string; onClose: () => void; onUpdate: () => void;
 }) {
@@ -331,6 +486,7 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
   const [toggling, setToggling] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [showFund, setShowFund] = useState(false);
 
   const syncBalance = async () => {
     setSyncing(true); setSyncResult(null);
@@ -433,7 +589,26 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
             <div style={{ fontFamily: "var(--font-display)", fontSize: 38, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 2 }}>
               ${wallet.balanceUsdc.toFixed(2)}
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>USDC · Base Sepolia</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>USDC · {network}</div>
+              {wallet.address && (
+                <button
+                  onClick={() => setShowFund(true)}
+                  style={{
+                    fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
+                    padding: "5px 12px", borderRadius: 99,
+                    background: "rgba(6,182,212,0.12)",
+                    border: "1px solid rgba(6,182,212,0.3)",
+                    color: "var(--cyan-400)", cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.2)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.12)"; }}
+                >
+                  + Fund Wallet
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Address */}
@@ -632,7 +807,18 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
           </div>
         </div>
       </div>
-      <style>{`@keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+      <style>{`
+        @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+      `}</style>
+      {showFund && (
+        <FundModal
+          wallet={wallet}
+          network={network}
+          onClose={() => setShowFund(false)}
+          onBalanceUpdate={onUpdate}
+        />
+      )}
     </>
   );
 }
@@ -766,6 +952,7 @@ function WalletsTab() {
   const { data: policies } = useApi<Policy[]>("/api/policies");
   const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
   const [selected, setSelected] = useState<Wallet | null>(null);
+  const [fundingWallet, setFundingWallet] = useState<Wallet | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState("");
   const [newFunding, setNewFunding] = useState("10");
@@ -841,8 +1028,20 @@ function WalletsTab() {
                     <span>{p2pCount} P2P</span>
                     <span>${sent.toFixed(2)} sent</span>
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--violet-400)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                    View details →
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 11, color: "var(--violet-400)", fontWeight: 600 }}>View details →</div>
+                    {w.address && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setFundingWallet(w); }}
+                        style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                          padding: "4px 10px", borderRadius: 99,
+                          background: "rgba(6,182,212,0.08)",
+                          border: "1px solid rgba(6,182,212,0.2)",
+                          color: "var(--cyan-400)", cursor: "pointer",
+                        }}
+                      >+ Fund</button>
+                    )}
                   </div>
                 </GlassCard>
               </div>
@@ -877,6 +1076,14 @@ function WalletsTab() {
           network={system?.cdpNetwork ?? "base-sepolia"}
           onClose={() => setSelected(null)}
           onUpdate={refetch}
+        />
+      )}
+      {fundingWallet && (
+        <FundModal
+          wallet={fundingWallet}
+          network={system?.cdpNetwork ?? "base-sepolia"}
+          onClose={() => setFundingWallet(null)}
+          onBalanceUpdate={refetch}
         />
       )}
     </>
