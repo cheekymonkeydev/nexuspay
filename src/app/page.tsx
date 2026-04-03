@@ -23,7 +23,7 @@ function buildSiweMessage(address: string, nonce: string, domain: string, uri: s
 
 async function runSiwe(): Promise<string | null> {
   const ethereum = (window as any).ethereum;
-  if (!ethereum) return null;
+  if (!ethereum) throw new Error("No wallet detected. Install MetaMask or Coinbase Wallet.");
   const [account] = await ethereum.request({ method: "eth_requestAccounts" });
   const { nonce } = await (await fetch("/api/auth/nonce")).json();
   const message = buildSiweMessage(account, nonce, window.location.host, window.location.origin);
@@ -33,8 +33,10 @@ async function runSiwe(): Promise<string | null> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ address: account, message, signature }),
   });
-  if (!res.ok) return null;
-  return account as string;
+  // 501 = open mode (no JWT_SECRET) — no session cookie needed, proceed anyway
+  if (res.ok || res.status === 501) return account as string;
+  const { error } = await res.json().catch(() => ({ error: "Verification failed" }));
+  throw new Error(error ?? "Verification failed");
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -43,20 +45,15 @@ async function runSiwe(): Promise<string | null> {
 function ConnectWalletBtn() {
   const router = useRouter();
   const [address, setAddress] = useState<string | null>(null);
-  const [openMode, setOpenMode] = useState(false);
-  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
 
+  // Check for existing session on mount
   useEffect(() => {
     fetch("/api/auth/me")
-      .then(r => r.json())
-      .then(d => {
-        if (d?.open) setOpenMode(true);
-        if (d?.address) setAddress(d.address);
-      })
-      .catch(() => {})
-      .finally(() => setReady(true));
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.address) setAddress(d.address); })
+      .catch(() => {});
   }, []);
 
   const connect = useCallback(async () => {
@@ -67,11 +64,10 @@ function ConnectWalletBtn() {
       if (addr) {
         setAddress(addr);
         router.push("/dashboard");
-      } else {
-        setErrMsg("Sign-in failed — check console for details");
       }
     } catch (e: any) {
-      if (e?.code !== 4001) setErrMsg(e?.message ?? "Something went wrong");
+      // code 4001 = user rejected — silent
+      if (e?.code !== 4001) setErrMsg(e?.message ?? "Connection failed");
     } finally {
       setLoading(false);
     }
@@ -89,19 +85,7 @@ function ConnectWalletBtn() {
     border: "none", cursor: "pointer", textDecoration: "none",
   } as const;
 
-  // Not ready yet — show a skeleton so nothing flashes
-  if (!ready) {
-    return (
-      <div style={{ width: 130, height: 36, borderRadius: 99, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.2)" }} />
-    );
-  }
-
-  // Open mode — no auth required, go straight to dashboard
-  if (openMode) {
-    return <Link href="/dashboard" style={baseBtnStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>Open Dashboard</Link>;
-  }
-
-  // Already authenticated
+  // Already connected — show address pill
   if (address) {
     return (
       <Link href="/dashboard" style={baseBtnStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
@@ -126,7 +110,7 @@ function ConnectWalletBtn() {
         {loading ? "Check wallet…" : "Connect Wallet"}
       </button>
       {errMsg && (
-        <div style={{ fontSize: 11, color: "#f87171", maxWidth: 200, textAlign: "right", lineHeight: 1.4 }}>{errMsg}</div>
+        <div style={{ fontSize: 11, color: "#f87171", maxWidth: 220, textAlign: "right", lineHeight: 1.4 }}>{errMsg}</div>
       )}
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
