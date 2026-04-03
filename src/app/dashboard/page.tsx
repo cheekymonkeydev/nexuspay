@@ -74,6 +74,16 @@ function ErrorMsg({ message }: { message: string }) {
   );
 }
 
+function EmptyState({ icon, title, sub }: { icon: string; title: string; sub: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", gap: 12 }}>
+      <div style={{ fontSize: 40, opacity: 0.3 }}>{icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-secondary)" }}>{title}</div>
+      <div style={{ fontSize: 13, color: "var(--text-tertiary)", textAlign: "center", maxWidth: 280 }}>{sub}</div>
+    </div>
+  );
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <GlassCard style={{ flex: 1, minWidth: 160, padding: 22 }}>
@@ -557,46 +567,127 @@ function WalletDrawer({ wallet, txns, policies, onClose, onUpdate }: {
 /* ═══ Tabs ═══ */
 function OverviewTab() {
   const { data: wallets, loading: wl } = useApi<Wallet[]>("/api/wallets");
-  const { data: txns, loading: tl } = useApi<Tx[]>("/api/transactions");
+  const { data: txns, loading: tl } = useApi<Tx[]>("/api/transactions", 30_000);
 
   if (wl || tl) return <Loader />;
 
-  const activeWallets = wallets?.filter((w) => w.status === "ACTIVE").length ?? 0;
-  const totalBalance = wallets?.reduce((s, w) => s + w.balanceUsdc, 0) ?? 0;
+  const all = txns ?? [];
+  const ws = wallets ?? [];
   const now = Date.now();
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
   const weekStart = new Date(now - 7 * 86_400_000);
-  const todayTxns = txns?.filter((t) => new Date(t.createdAt) >= dayStart) ?? [];
-  const todayVolume = todayTxns.filter((t) => t.status === "CONFIRMED").reduce((s, t) => s + t.amountUsdc, 0);
-  const weekP2P = txns?.filter((t) => t.isP2P && new Date(t.createdAt) >= weekStart).length ?? 0;
+  const prevWeekStart = new Date(now - 14 * 86_400_000);
+
+  const confirmed = all.filter((t) => t.status === "CONFIRMED");
+  const totalBalance = ws.reduce((s, w) => s + w.balanceUsdc, 0);
+  const activeWallets = ws.filter((w) => w.status === "ACTIVE").length;
+
+  const todayConf = confirmed.filter((t) => new Date(t.createdAt) >= dayStart);
+  const todayVolume = todayConf.reduce((s, t) => s + t.amountUsdc, 0);
+
+  const weekConf = confirmed.filter((t) => new Date(t.createdAt) >= weekStart);
+  const weekVolume = weekConf.reduce((s, t) => s + t.amountUsdc, 0);
+  const prevWeekConf = confirmed.filter((t) => {
+    const d = new Date(t.createdAt);
+    return d >= prevWeekStart && d < weekStart;
+  });
+  const prevWeekVolume = prevWeekConf.reduce((s, t) => s + t.amountUsdc, 0);
+  const weekChange = prevWeekVolume > 0 ? ((weekVolume - prevWeekVolume) / prevWeekVolume * 100).toFixed(0) : null;
+
+  const weekAll = all.filter((t) => new Date(t.createdAt) >= weekStart);
+  const failCount = weekAll.filter((t) => t.status === "FAILED" || t.status === "REJECTED").length;
+  const failRate = weekAll.length > 0 ? ((failCount / weekAll.length) * 100).toFixed(1) : "0";
+
+  const agentVolumes = ws.map((w) => ({
+    id: w.agentId,
+    vol: confirmed.filter((t) => t.fromAgentId === w.agentId).reduce((s, t) => s + t.amountUsdc, 0),
+  })).sort((a, b) => b.vol - a.vol);
+  const topAgent = agentVolumes[0];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* Stats row */}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <Stat label="Total Balance" value={`$${totalBalance.toFixed(2)}`} sub={`${wallets?.length ?? 0} wallets`} />
-        <Stat label="Active Wallets" value={`${activeWallets}`} sub={`${wallets?.length ?? 0} total`} />
-        <Stat label="Today" value={`$${todayVolume.toFixed(2)}`} sub={`${todayTxns.length} transactions`} />
-        <Stat label="P2P This Week" value={`${weekP2P}`} />
+        <Stat label="Total Balance" value={`$${totalBalance.toFixed(2)}`} sub={`${ws.length} wallets · ${activeWallets} active`} />
+        <Stat label="Volume Today" value={`$${todayVolume.toFixed(2)}`} sub={`${todayConf.length} confirmed txns`} />
+        <Stat
+          label="Volume This Week"
+          value={`$${weekVolume.toFixed(2)}`}
+          sub={weekChange !== null ? `${Number(weekChange) >= 0 ? "+" : ""}${weekChange}% vs last week` : `${weekConf.length} txns`}
+        />
+        <Stat label="Failure Rate" value={`${failRate}%`} sub="Last 7 days" />
       </div>
-      <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Recent Activity</h3>
-      <DataTable
-        headers={["From", "To", "Amount", "Type", "Status", "Time"]}
-        rows={(txns ?? []).slice(0, 6).map((t) => [
-          <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
-          <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
-          <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
-          <Badge key="type" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : t.category === "x402" ? "x402" : "ON-CHAIN"}</Badge>,
-          <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
-          <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
-        ])}
-      />
+
+      {/* Top agent + breakdown */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <GlassCard style={{ padding: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 14 }}>Agent Activity</div>
+          {agentVolumes.length === 0
+            ? <EmptyState icon="◈" title="No agents yet" sub="Create a wallet to get started" />
+            : agentVolumes.slice(0, 5).map((a, i) => (
+              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", width: 14 }}>{i + 1}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: a.id === topAgent?.id ? "var(--violet-300)" : "var(--text)" }}>{a.id}</span>
+                <span style={{ fontSize: 13, fontFamily: "var(--font-mono)", fontWeight: 700 }}>${a.vol.toFixed(2)}</span>
+              </div>
+            ))
+          }
+        </GlassCard>
+
+        <GlassCard style={{ padding: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 14 }}>Payment Mix (7d)</div>
+          {weekConf.length === 0
+            ? <EmptyState icon="↗" title="No transactions" sub="Transactions will appear here" />
+            : (() => {
+              const onChain = weekConf.filter((t) => !t.isP2P && t.category !== "x402").length;
+              const p2p = weekConf.filter((t) => t.isP2P).length;
+              const x402 = weekConf.filter((t) => t.category === "x402").length;
+              const total = weekConf.length;
+              return [
+                { label: "On-Chain", count: onChain, color: "var(--cyan-400)" },
+                { label: "P2P", count: p2p, color: "var(--violet-300)" },
+                { label: "x402", count: x402, color: "#f59e0b" },
+              ].map(({ label, count, color }) => (
+                <div key={label} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: "var(--text-secondary)" }}>{label}</span>
+                    <span style={{ fontWeight: 600 }}>{count} <span style={{ color: "var(--text-tertiary)" }}>({total > 0 ? ((count / total) * 100).toFixed(0) : 0}%)</span></span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)" }}>
+                    <div style={{ height: 4, borderRadius: 2, background: color, width: `${total > 0 ? (count / total) * 100 : 0}%`, transition: "width 0.6s ease" }} />
+                  </div>
+                </div>
+              ));
+            })()
+          }
+        </GlassCard>
+      </div>
+
+      {/* Recent activity */}
+      <div>
+        <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 14 }}>Recent Activity</h3>
+        {all.length === 0
+          ? <EmptyState icon="↗" title="No transactions yet" sub="Send a transaction or create a wallet to get started" />
+          : <DataTable
+              headers={["From", "To", "Amount", "Type", "Status", "Time"]}
+              rows={all.slice(0, 8).map((t) => [
+                <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
+                <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
+                <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
+                <Badge key="type" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : t.category === "x402" ? "x402" : "ON-CHAIN"}</Badge>,
+                <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
+                <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
+              ])}
+            />
+        }
+      </div>
     </div>
   );
 }
 
 function WalletsTab() {
-  const { data: wallets, loading, error, refetch } = useApi<Wallet[]>("/api/wallets");
-  const { data: txns } = useApi<Tx[]>("/api/transactions");
+  const { data: wallets, loading, error, refetch } = useApi<Wallet[]>("/api/wallets", 30_000);
+  const { data: txns } = useApi<Tx[]>("/api/transactions", 30_000);
   const { data: policies } = useApi<Policy[]>("/api/policies");
   const [selected, setSelected] = useState<Wallet | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -646,6 +737,7 @@ function WalletsTab() {
           <Btn onClick={() => setShowCreate(true)}>+ Create Wallet</Btn>
         </div>
 
+        {(wallets ?? []).length === 0 && <EmptyState icon="◈" title="No wallets yet" sub="Create your first agent wallet to get started" />}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
           {(wallets ?? []).map((w) => {
             const txCount = txns?.filter((t) => t.fromAgentId === w.agentId).length ?? 0;
@@ -715,8 +807,8 @@ function WalletsTab() {
 }
 
 function TransactionsTab() {
-  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions");
-  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showSend, setShowSend] = useState(false);
@@ -791,18 +883,21 @@ function TransactionsTab() {
           <Btn onClick={() => setShowSend(true)}>+ Send Transaction</Btn>
         </div>
         <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{filtered.length} of {txns?.length ?? 0} transactions</div>
-        <DataTable
-          headers={["From", "To", "Amount", "Category", "Status", "Hash", "Time"]}
-          rows={filtered.map((t) => [
-            <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
-            <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
-            <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
-            <Badge key="cat" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : (t.category || "—").toUpperCase()}</Badge>,
-            <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
-            <MonoText key="hash">{t.txHash ? truncAddr(t.txHash) : "—"}</MonoText>,
-            <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
-          ])}
-        />
+        {filtered.length === 0
+          ? <EmptyState icon="↗" title="No transactions found" sub="Try adjusting your filters, or send your first transaction" />
+          : <DataTable
+              headers={["From", "To", "Amount", "Category", "Status", "Hash", "Time"]}
+              rows={filtered.map((t) => [
+                <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
+                <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
+                <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
+                <Badge key="cat" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : (t.category || "—").toUpperCase()}</Badge>,
+                <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
+                <MonoText key="hash">{t.txHash ? truncAddr(t.txHash) : "—"}</MonoText>,
+                <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
+              ])}
+            />
+        }
       </div>
 
       {showSend && (
@@ -840,8 +935,8 @@ function TransactionsTab() {
 }
 
 function P2PTab() {
-  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions");
-  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const [showModal, setShowModal] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -853,6 +948,16 @@ function P2PTab() {
   const p2p = (txns ?? []).filter((t) => t.isP2P);
   const total = p2p.reduce((s, t) => s + t.amountUsdc, 0);
   const agentIds = (wallets ?? []).map((w) => w.agentId);
+
+  // Compute top agent pairs by volume
+  const pairMap: Record<string, { vol: number; count: number }> = {};
+  p2p.filter((t) => t.status === "CONFIRMED").forEach((t) => {
+    const key = `${t.fromAgentId} → ${t.toAgentId || truncAddr(t.toAddress)}`;
+    if (!pairMap[key]) pairMap[key] = { vol: 0, count: 0 };
+    pairMap[key].vol += t.amountUsdc;
+    pairMap[key].count++;
+  });
+  const topPairs = Object.entries(pairMap).sort((a, b) => b[1].vol - a[1].vol).slice(0, 5);
 
   const sendP2P = useCallback(async () => {
     if (!from || !to || !amount) { setSendError("All fields required"); return; }
@@ -893,25 +998,43 @@ function P2PTab() {
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <Stat label="Total P2P" value={`${p2p.length}`} />
-          <Stat label="P2P Volume" value={`$${total.toFixed(2)}`} />
-          <Stat label="Avg Size" value={p2p.length > 0 ? `$${(total / p2p.length).toFixed(2)}` : "$0"} />
+          <Stat label="Total P2P" value={`${p2p.length}`} sub={`${p2p.filter(t => t.status === "CONFIRMED").length} confirmed`} />
+          <Stat label="P2P Volume" value={`$${total.toFixed(2)}`} sub="All time" />
+          <Stat label="Avg Transfer" value={p2p.length > 0 ? `$${(total / p2p.length).toFixed(2)}` : "$0"} />
+          <Stat label="Unique Pairs" value={`${Object.keys(pairMap).length}`} sub="Agent combinations" />
         </div>
+
+        {topPairs.length > 0 && (
+          <GlassCard style={{ padding: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 14 }}>Top Agent Pairs by Volume</div>
+            {topPairs.map(([pair, { vol, count }]) => (
+              <div key={pair} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, fontSize: 13 }}>
+                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-secondary)" }}>{pair}</span>
+                <span style={{ color: "var(--text-tertiary)", fontSize: 11 }}>{count}×</span>
+                <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)" }}>${vol.toFixed(2)}</span>
+              </div>
+            ))}
+          </GlassCard>
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Agent-to-Agent Transfers</h3>
           <Btn onClick={() => setShowModal(true)}>+ New Transfer</Btn>
         </div>
-        <DataTable
-          headers={["From", "To", "Amount", "Memo", "Status", "Time"]}
-          rows={p2p.map((t) => [
-            <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
-            <span key="to" style={{ fontWeight: 500 }}>{t.toAgentId || truncAddr(t.toAddress)}</span>,
-            <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc.toFixed(2)}</span>,
-            <span key="m" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t.memo || "—"}</span>,
-            <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
-            <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
-          ])}
-        />
+        {p2p.length === 0
+          ? <EmptyState icon="⇄" title="No P2P transfers yet" sub="Transfer USDC instantly between agent wallets with no gas fees" />
+          : <DataTable
+              headers={["From", "To", "Amount", "Memo", "Status", "Time"]}
+              rows={p2p.map((t) => [
+                <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
+                <span key="to" style={{ fontWeight: 500 }}>{t.toAgentId || truncAddr(t.toAddress)}</span>,
+                <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc.toFixed(2)}</span>,
+                <span key="m" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t.memo || "—"}</span>,
+                <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
+                <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
+              ])}
+            />
+        }
       </div>
 
       {showModal && (

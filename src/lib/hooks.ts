@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface UseApiResult<T> {
   data: T | null;
@@ -9,13 +9,14 @@ interface UseApiResult<T> {
   refetch: () => void;
 }
 
-export function useApi<T>(url: string): UseApiResult<T> {
+export function useApi<T>(url: string, pollInterval?: number): UseApiResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await fetch(url);
@@ -28,11 +29,21 @@ export function useApi<T>(url: string): UseApiResult<T> {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [url]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
 
-  return { data, loading, error, refetch: fetchData };
+    if (pollInterval && pollInterval > 0) {
+      intervalRef.current = setInterval(() => fetchData(true), pollInterval);
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchData, pollInterval]);
+
+  return { data, loading, error, refetch: () => fetchData() };
 }
