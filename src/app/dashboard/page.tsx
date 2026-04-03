@@ -254,8 +254,8 @@ function Input({ value, onChange, placeholder, type = "text" }: {
 }
 
 /* ═══ Wallet Detail Drawer ═══ */
-function WalletDrawer({ wallet, txns, policies, onClose, onUpdate }: {
-  wallet: Wallet; txns: Tx[]; policies: Policy[]; onClose: () => void; onUpdate: () => void;
+function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
+  wallet: Wallet; txns: Tx[]; policies: Policy[]; network: string; onClose: () => void; onUpdate: () => void;
 }) {
   const [localStatus, setLocalStatus] = useState(wallet.status);
   const [toggling, setToggling] = useState(false);
@@ -382,7 +382,7 @@ function WalletDrawer({ wallet, txns, policies, onClose, onUpdate }: {
                 {wallet.address && <CopyBtn text={wallet.address} />}
                 {wallet.address && (
                   <a
-                    href={`https://sepolia.basescan.org/address/${wallet.address}`}
+                    href={basescanAddr(wallet.address, network)}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -692,6 +692,7 @@ function WalletsTab() {
   const { data: wallets, loading, error, refetch } = useApi<Wallet[]>("/api/wallets", 30_000);
   const { data: txns } = useApi<Tx[]>("/api/transactions", 30_000);
   const { data: policies } = useApi<Policy[]>("/api/policies");
+  const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
   const [selected, setSelected] = useState<Wallet | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState("");
@@ -801,6 +802,7 @@ function WalletsTab() {
           wallet={selected}
           txns={txns ?? []}
           policies={policies ?? []}
+          network={system?.cdpNetwork ?? "base-sepolia"}
           onClose={() => setSelected(null)}
           onUpdate={refetch}
         />
@@ -812,6 +814,7 @@ function WalletsTab() {
 function TransactionsTab() {
   const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
+  const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
   const [agentFilter, setAgentFilter] = useState("all");
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -902,7 +905,7 @@ function TransactionsTab() {
               ])}
             />
         }
-        {selectedTx && <TxDetailModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
+        {selectedTx && <TxDetailModal tx={selectedTx} network={system?.cdpNetwork ?? "base-sepolia"} onClose={() => setSelectedTx(null)} />}
       </div>
 
       {showSend && (
@@ -1558,10 +1561,16 @@ function TreasuryTab() {
   );
 }
 
+function basescanTx(hash: string, network: string) {
+  return network === "base" ? `https://basescan.org/tx/${hash}` : `https://sepolia.basescan.org/tx/${hash}`;
+}
+function basescanAddr(addr: string, network: string) {
+  return network === "base" ? `https://basescan.org/address/${addr}` : `https://sepolia.basescan.org/address/${addr}`;
+}
+
 /* ═══ Transaction Detail Modal ═══ */
-function TxDetailModal({ tx, onClose }: { tx: Tx; onClose: () => void }) {
-  const network = "base-sepolia";
-  const basescanUrl = tx.txHash ? `https://sepolia.basescan.org/tx/${tx.txHash}` : null;
+function TxDetailModal({ tx, network, onClose }: { tx: Tx; network: string; onClose: () => void }) {
+  const basescanUrl = tx.txHash ? basescanTx(tx.txHash, network) : null;
 
   return (
     <Modal title="Transaction Details" onClose={onClose}>
@@ -1603,7 +1612,7 @@ function TxDetailModal({ tx, onClose }: { tx: Tx; onClose: () => void }) {
         )}
         <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: 8, background: "transparent", border: "1px solid var(--border-hover)", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Close</button>
       </div>
-      <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", marginTop: 4 }}>Network: {network}</div>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", marginTop: 4 }}>Network: {network === "base" ? "Base Mainnet" : "Base Sepolia"}</div>
     </Modal>
   );
 }

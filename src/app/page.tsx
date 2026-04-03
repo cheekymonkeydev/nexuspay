@@ -392,7 +392,7 @@ export default function LandingPage() {
             color: "var(--violet-300)", marginBottom: 28,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-400)" }} />
-            USDC ON BASE &middot; LIVE ON TESTNET
+            USDC ON BASE &middot; LIVE ON MAINNET
           </div>
 
           <h1 data-reveal data-reveal-delay="80" style={{
