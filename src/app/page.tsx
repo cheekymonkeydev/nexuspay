@@ -44,6 +44,7 @@ function ConnectWalletBtn() {
   const router = useRouter();
   const [address, setAddress] = useState<string | null>(null);
   const [openMode, setOpenMode] = useState(false);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
 
@@ -54,7 +55,8 @@ function ConnectWalletBtn() {
         if (d?.open) setOpenMode(true);
         if (d?.address) setAddress(d.address);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setReady(true));
   }, []);
 
   const connect = useCallback(async () => {
@@ -75,32 +77,34 @@ function ConnectWalletBtn() {
     }
   }, [router]);
 
-  const btnStyle = {
+  const hoverOn = (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; };
+  const hoverOff = (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; };
+
+  const baseBtnStyle = {
     padding: "9px 22px", borderRadius: 99,
     background: "var(--gradient-brand)",
     color: "white", fontSize: 13, fontWeight: 600,
     display: "flex", alignItems: "center", gap: 8,
     transition: "transform 0.25s, box-shadow 0.25s",
-    border: "none", cursor: "pointer",
+    border: "none", cursor: "pointer", textDecoration: "none",
   } as const;
 
-  // Open mode — no auth required, just go straight to dashboard
-  if (openMode && !address) {
+  // Not ready yet — show a skeleton so nothing flashes
+  if (!ready) {
     return (
-      <Link href="/dashboard" style={btnStyle}
-        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-      >Open Dashboard</Link>
+      <div style={{ width: 130, height: 36, borderRadius: 99, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.2)" }} />
     );
+  }
+
+  // Open mode — no auth required, go straight to dashboard
+  if (openMode) {
+    return <Link href="/dashboard" style={baseBtnStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>Open Dashboard</Link>;
   }
 
   // Already authenticated
   if (address) {
     return (
-      <Link href="/dashboard" style={btnStyle}
-        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-      >
+      <Link href="/dashboard" style={baseBtnStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan-400)", flexShrink: 0 }} />
         {address.slice(0, 6)}…{address.slice(-4)}
       </Link>
@@ -110,13 +114,13 @@ function ConnectWalletBtn() {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
       <button onClick={connect} disabled={loading} style={{
-        ...btnStyle,
+        ...baseBtnStyle,
         background: loading ? "rgba(139,92,246,0.35)" : "var(--gradient-brand)",
         cursor: loading ? "wait" : "pointer",
         opacity: loading ? 0.8 : 1,
       }}
-      onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; } }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+      onMouseEnter={(e) => { if (!loading) hoverOn(e); }}
+      onMouseLeave={hoverOff}
       >
         {loading && <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite", display: "inline-block", flexShrink: 0 }} />}
         {loading ? "Check wallet…" : "Connect Wallet"}
