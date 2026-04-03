@@ -996,13 +996,13 @@ function PoliciesTab() {
             </select>
           </Field>
           <Field label="Max per transaction ($)">
-            <Input value={pMaxTx} onChange={(e) => setPMaxTx(e.target.value)} type="number" placeholder="50" />
+            <Input value={pMaxTx} onChange={setPMaxTx} type="number" placeholder="50" />
           </Field>
           <Field label="Daily limit ($)">
-            <Input value={pDaily} onChange={(e) => setPDaily(e.target.value)} type="number" placeholder="500" />
+            <Input value={pDaily} onChange={setPDaily} type="number" placeholder="500" />
           </Field>
           <Field label="Monthly limit ($)">
-            <Input value={pMonthly} onChange={(e) => setPMonthly(e.target.value)} type="number" placeholder="5000" />
+            <Input value={pMonthly} onChange={setPMonthly} type="number" placeholder="5000" />
           </Field>
           <Field label="">
             <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13 }}>
@@ -1081,13 +1081,13 @@ function X402Tab() {
       {showRegister && (
         <Modal title="Register x402 Endpoint" onClose={() => setShowRegister(false)}>
           <Field label="Path">
-            <Input value={ePath} onChange={(e) => setEPath(e.target.value)} placeholder="/api/your-endpoint" />
+            <Input value={ePath} onChange={setEPath} placeholder="/api/your-endpoint" />
           </Field>
           <Field label="Price (USDC)">
-            <Input value={ePrice} onChange={(e) => setEPrice(e.target.value)} type="number" placeholder="0.01" />
+            <Input value={ePrice} onChange={setEPrice} type="number" placeholder="0.01" />
           </Field>
           <Field label="Description (optional)">
-            <Input value={eDesc} onChange={(e) => setEDesc(e.target.value)} placeholder="What does this endpoint do?" />
+            <Input value={eDesc} onChange={setEDesc} placeholder="What does this endpoint do?" />
           </Field>
           {registerErr && <div style={{ color: "#f87171", fontSize: 13 }}>{registerErr}</div>}
           <button onClick={registerEndpoint} disabled={registering} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: registering ? "not-allowed" : "pointer", opacity: registering ? 0.7 : 1, marginTop: 4 }}>
