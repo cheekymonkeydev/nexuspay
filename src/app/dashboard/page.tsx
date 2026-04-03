@@ -35,6 +35,31 @@ interface ApiKey {
   isActive: boolean; lastUsedAt: string | null; createdAt: string;
 }
 
+/* ═══ Sign out ═══ */
+function SignOutBtn() {
+  const [loading, setLoading] = useState(false);
+  const signOut = async () => {
+    setLoading(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
+  return (
+    <button
+      onClick={signOut}
+      disabled={loading}
+      style={{
+        margin: "0 14px 16px", padding: "9px 14px",
+        borderRadius: "var(--radius-sm)", width: "calc(100% - 28px)",
+        background: "transparent", border: "1px solid var(--border)",
+        fontSize: 12, color: "var(--text-tertiary)",
+        fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(248,113,113,0.3)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+    >{loading ? "Signing out…" : "Sign out"}</button>
+  );
+}
+
 /* ═══ Constants ═══ */
 type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys";
 const tabList: { key: Tab; label: string; icon: string }[] = [
@@ -1686,10 +1711,11 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        <Link href="/docs" style={{ margin: "0 14px", padding: "9px 14px", borderRadius: "var(--radius-sm)", display: "block", background: "transparent", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", textDecoration: "none" }}
+        <Link href="/docs" style={{ margin: "0 14px 6px", padding: "9px 14px", borderRadius: "var(--radius-sm)", display: "block", background: "transparent", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", textDecoration: "none" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.borderColor = "var(--border)"; }}
         >API Docs →</Link>
+        <SignOutBtn />
       </aside>
 
       {/* Main */}
