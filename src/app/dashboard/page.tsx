@@ -234,14 +234,16 @@ function Input({ value, onChange, placeholder, type = "text" }: {
 }
 
 /* ═══ Wallet Detail Drawer ═══ */
-function WalletDrawer({ wallet, txns, policies, onClose }: {
-  wallet: Wallet; txns: Tx[]; policies: Policy[]; onClose: () => void;
+function WalletDrawer({ wallet, txns, policies, onClose, onUpdate }: {
+  wallet: Wallet; txns: Tx[]; policies: Policy[]; onClose: () => void; onUpdate: () => void;
 }) {
+  const [localStatus, setLocalStatus] = useState(wallet.status);
+  const [toggling, setToggling] = useState(false);
+
   const agentTxns = txns.filter((t) => t.fromAgentId === wallet.agentId || t.toAgentId === wallet.agentId);
   const sentTxns = agentTxns.filter((t) => t.fromAgentId === wallet.agentId && t.status === "CONFIRMED");
   const policy = policies.find((p) => p.agentId === wallet.agentId);
 
-  // 7-day sparkline (most-recent day on right)
   const sparkData = Array(7).fill(0);
   const now = Date.now();
   sentTxns.forEach((t) => {
@@ -253,6 +255,20 @@ function WalletDrawer({ wallet, txns, policies, onClose }: {
   const totalSent = sentTxns.reduce((s, t) => s + t.amountUsdc, 0);
   const received = agentTxns.filter((t) => t.toAgentId === wallet.agentId && t.status === "CONFIRMED").reduce((s, t) => s + t.amountUsdc, 0);
   const p2pCount = sentTxns.filter((t) => t.isP2P).length;
+
+  const toggleStatus = async () => {
+    const next = localStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+    setToggling(true);
+    try {
+      const res = await fetch(`/api/wallets/${wallet.agentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const json = await res.json();
+      if (json.success) { setLocalStatus(next); onUpdate(); }
+    } finally { setToggling(false); }
+  };
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -284,7 +300,7 @@ function WalletDrawer({ wallet, txns, policies, onClose }: {
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 19, letterSpacing: "-0.02em", marginBottom: 4 }}>
               {wallet.agentId}
             </div>
-            <Badge variant={statusVariant[wallet.status] || "default"}>{wallet.status}</Badge>
+            <Badge variant={statusVariant[localStatus] || "default"}>{localStatus}</Badge>
           </div>
           <button onClick={onClose} style={{
             width: 30, height: 30, borderRadius: "50%", fontSize: 18,
@@ -467,6 +483,20 @@ function WalletDrawer({ wallet, txns, policies, onClose }: {
             )}
           </div>
 
+          {/* Actions */}
+          {wallet.status !== "REVOKED" && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Wallet Actions</div>
+              <Btn
+                variant={localStatus === "ACTIVE" ? "danger" : "primary"}
+                onClick={toggleStatus}
+                disabled={toggling}
+              >
+                {toggling ? "Updating…" : localStatus === "ACTIVE" ? "Suspend Wallet" : "Reactivate Wallet"}
+              </Btn>
+            </div>
+          )}
+
           {/* Meta */}
           <div style={{ paddingBottom: 8 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Details</div>
@@ -643,6 +673,7 @@ function WalletsTab() {
           txns={txns ?? []}
           policies={policies ?? []}
           onClose={() => setSelected(null)}
+          onUpdate={refetch}
         />
       )}
     </>
@@ -650,15 +681,40 @@ function WalletsTab() {
 }
 
 function TransactionsTab() {
-  const { data: txns, loading, error } = useApi<Tx[]>("/api/transactions");
+  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions");
   const { data: wallets } = useApi<Wallet[]>("/api/wallets");
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showSend, setShowSend] = useState(false);
+  const [fromAgent, setFromAgent] = useState("");
+  const [toAddr, setToAddr] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("compute");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+
+  const agentIds = [...new Set((wallets ?? []).map((w) => w.agentId))];
+
+  const sendTx = useCallback(async () => {
+    if (!fromAgent || !toAddr || !amount) { setSendError("All fields required"); return; }
+    setSending(true); setSendError("");
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromAgentId: fromAgent, toAddress: toAddr, amountUsdc: parseFloat(amount), category }),
+      });
+      const json = await res.json();
+      if (!json.success) { setSendError(json.error || "Transaction failed"); return; }
+      setShowSend(false); setFromAgent(""); setToAddr(""); setAmount(""); setCategory("compute");
+      refetch();
+    } catch { setSendError("Network error"); }
+    finally { setSending(false); }
+  }, [fromAgent, toAddr, amount, category, refetch]);
 
   if (loading) return <Loader />;
   if (error) return <ErrorMsg message={error} />;
 
-  const agentIds = [...new Set((wallets ?? []).map((w) => w.agentId))];
   const filtered = (txns ?? []).filter((t) => {
     const matchAgent = agentFilter === "all" || t.fromAgentId === agentFilter || t.toAgentId === agentFilter;
     const matchStatus = statusFilter === "all" || t.status === statusFilter;
@@ -673,38 +729,79 @@ function TransactionsTab() {
     cursor: "pointer", transition: "all 0.15s",
   });
 
+  const selectStyle = {
+    width: "100%", padding: "10px 14px",
+    background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hover)",
+    borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 14, outline: "none", boxSizing: "border-box" as const,
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Filters */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Agent:</span>
-        {["all", ...agentIds].map((id) => (
-          <button key={id} style={filterBtnStyle(agentFilter === id)} onClick={() => setAgentFilter(id)}>
-            {id === "all" ? "All" : id}
-          </button>
-        ))}
-        <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
-        <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Status:</span>
-        {["all", "CONFIRMED", "PENDING", "FAILED", "REJECTED"].map((s) => (
-          <button key={s} style={filterBtnStyle(statusFilter === s)} onClick={() => setStatusFilter(s)}>
-            {s === "all" ? "All" : s}
-          </button>
-        ))}
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Agent:</span>
+            {["all", ...agentIds].map((id) => (
+              <button key={id} style={filterBtnStyle(agentFilter === id)} onClick={() => setAgentFilter(id)}>
+                {id === "all" ? "All" : id}
+              </button>
+            ))}
+            <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Status:</span>
+            {["all", "CONFIRMED", "PENDING", "FAILED", "REJECTED"].map((s) => (
+              <button key={s} style={filterBtnStyle(statusFilter === s)} onClick={() => setStatusFilter(s)}>
+                {s === "all" ? "All" : s}
+              </button>
+            ))}
+          </div>
+          <Btn onClick={() => setShowSend(true)}>+ Send Transaction</Btn>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{filtered.length} of {txns?.length ?? 0} transactions</div>
+        <DataTable
+          headers={["From", "To", "Amount", "Category", "Status", "Hash", "Time"]}
+          rows={filtered.map((t) => [
+            <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
+            <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
+            <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
+            <Badge key="cat" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : (t.category || "—").toUpperCase()}</Badge>,
+            <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
+            <MonoText key="hash">{t.txHash ? truncAddr(t.txHash) : "—"}</MonoText>,
+            <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
+          ])}
+        />
       </div>
-      <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{filtered.length} of {txns?.length ?? 0} transactions</div>
-      <DataTable
-        headers={["From", "To", "Amount", "Category", "Status", "Hash", "Time"]}
-        rows={filtered.map((t) => [
-          <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
-          <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
-          <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
-          <Badge key="cat" variant={t.isP2P ? "violet" : t.category === "x402" ? "cyan" : "default"}>{t.isP2P ? "P2P" : (t.category || "—").toUpperCase()}</Badge>,
-          <Badge key="st" variant={statusVariant[t.status] || "default"}>{t.status}</Badge>,
-          <MonoText key="hash">{t.txHash ? truncAddr(t.txHash) : "—"}</MonoText>,
-          <span key="time" style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{timeAgo(t.createdAt)}</span>,
-        ])}
-      />
-    </div>
+
+      {showSend && (
+        <Modal title="Send On-Chain Transaction" onClose={() => { setShowSend(false); setSendError(""); }}>
+          <Field label="From Agent">
+            <select value={fromAgent} onChange={(e) => setFromAgent(e.target.value)} style={selectStyle}>
+              <option value="">Select agent…</option>
+              {(wallets ?? []).filter((w) => w.status === "ACTIVE").map((w) => (
+                <option key={w.agentId} value={w.agentId}>{w.agentId} (${w.balanceUsdc.toFixed(2)})</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="To Address (0x…)">
+            <Input value={toAddr} onChange={setToAddr} placeholder="0x742d35Cc6634C0532925a3b8D4C9B7..." />
+          </Field>
+          <Field label="Amount (USDC)">
+            <Input value={amount} onChange={setAmount} placeholder="1.00" type="number" />
+          </Field>
+          <Field label="Category">
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={selectStyle}>
+              {["compute", "storage", "api", "data", "inference", "other"].map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </Field>
+          {sendError && <div style={{ fontSize: 13, color: "#f87171", marginBottom: 14 }}>{sendError}</div>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+            <Btn variant="secondary" onClick={() => setShowSend(false)}>Cancel</Btn>
+            <Btn onClick={sendTx} disabled={sending}>{sending ? "Sending…" : "Send"}</Btn>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -805,7 +902,46 @@ function P2PTab() {
 }
 
 function PoliciesTab() {
-  const { data: policies, loading, error } = useApi<Policy[]>("/api/policies");
+  const { data: policies, loading, error, refetch } = useApi<Policy[]>("/api/policies");
+  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+  const [showCreate, setShowCreate] = useState(false);
+  const [pAgent, setPAgent] = useState("");
+  const [pTier, setPTier] = useState("MODERATE");
+  const [pMaxTx, setPMaxTx] = useState("50");
+  const [pDaily, setPDaily] = useState("500");
+  const [pMonthly, setPMonthly] = useState("5000");
+  const [pRequireApproval, setPRequireApproval] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+
+  async function createPolicy() {
+    if (!pAgent) { setCreateErr("Select an agent"); return; }
+    setCreating(true); setCreateErr("");
+    try {
+      const res = await fetch("/api/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: pAgent,
+          tier: pTier,
+          maxPerTransaction: parseFloat(pMaxTx),
+          dailyLimit: parseFloat(pDaily),
+          monthlyLimit: parseFloat(pMonthly),
+          requireApproval: pRequireApproval,
+          allowedRecipients: [],
+          blockedMerchants: [],
+          allowedCategories: [],
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      setShowCreate(false);
+      setPAgent(""); setPMaxTx("50"); setPDaily("500"); setPMonthly("5000"); setPRequireApproval(false);
+      refetch();
+    } catch (e: unknown) {
+      setCreateErr(e instanceof Error ? e.message : "Error");
+    } finally { setCreating(false); }
+  }
 
   if (loading) return <Loader />;
   if (error) return <ErrorMsg message={error} />;
@@ -814,6 +950,9 @@ function PoliciesTab() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Spending Policies</h3>
+        <button onClick={() => setShowCreate(true)} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          + Create Policy
+        </button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
         {(policies ?? []).map((p) => (
@@ -840,12 +979,74 @@ function PoliciesTab() {
           </GlassCard>
         ))}
       </div>
+      {showCreate && (
+        <Modal title="Create Spending Policy" onClose={() => setShowCreate(false)}>
+          <Field label="Agent">
+            <select value={pAgent} onChange={(e) => setPAgent(e.target.value)} style={{ width: "100%", background: "var(--bg-secondary)", border: "1px solid var(--border-primary)", borderRadius: 8, padding: "10px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+              <option value="">Select agent…</option>
+              {(wallets ?? []).map((w) => <option key={w.agentId} value={w.agentId}>{w.agentId}</option>)}
+            </select>
+          </Field>
+          <Field label="Tier">
+            <select value={pTier} onChange={(e) => setPTier(e.target.value)} style={{ width: "100%", background: "var(--bg-secondary)", border: "1px solid var(--border-primary)", borderRadius: 8, padding: "10px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+              <option value="CONSERVATIVE">Conservative</option>
+              <option value="MODERATE">Moderate</option>
+              <option value="AGGRESSIVE">Aggressive</option>
+              <option value="CUSTOM">Custom</option>
+            </select>
+          </Field>
+          <Field label="Max per transaction ($)">
+            <Input value={pMaxTx} onChange={(e) => setPMaxTx(e.target.value)} type="number" placeholder="50" />
+          </Field>
+          <Field label="Daily limit ($)">
+            <Input value={pDaily} onChange={(e) => setPDaily(e.target.value)} type="number" placeholder="500" />
+          </Field>
+          <Field label="Monthly limit ($)">
+            <Input value={pMonthly} onChange={(e) => setPMonthly(e.target.value)} type="number" placeholder="5000" />
+          </Field>
+          <Field label="">
+            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13 }}>
+              <input type="checkbox" checked={pRequireApproval} onChange={(e) => setPRequireApproval(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--accent-primary)" }} />
+              <span>Require approval for all transactions</span>
+            </label>
+          </Field>
+          {createErr && <div style={{ color: "#f87171", fontSize: 13 }}>{createErr}</div>}
+          <button onClick={createPolicy} disabled={creating} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.7 : 1, marginTop: 4 }}>
+            {creating ? "Creating…" : "Create Policy"}
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }
 
 function X402Tab() {
-  const { data: endpoints, loading, error } = useApi<Paywall[]>("/api/x402");
+  const { data: endpoints, loading, error, refetch } = useApi<Paywall[]>("/api/x402");
+  const [showRegister, setShowRegister] = useState(false);
+  const [ePath, setEPath] = useState("");
+  const [ePrice, setEPrice] = useState("0.01");
+  const [eDesc, setEDesc] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [registerErr, setRegisterErr] = useState("");
+
+  async function registerEndpoint() {
+    if (!ePath) { setRegisterErr("Path is required"); return; }
+    setRegistering(true); setRegisterErr("");
+    try {
+      const res = await fetch("/api/x402", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: ePath, priceUsdc: parseFloat(ePrice), description: eDesc || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      setShowRegister(false);
+      setEPath(""); setEPrice("0.01"); setEDesc("");
+      refetch();
+    } catch (e: unknown) {
+      setRegisterErr(e instanceof Error ? e.message : "Error");
+    } finally { setRegistering(false); }
+  }
 
   if (loading) return <Loader />;
   if (error) return <ErrorMsg message={error} />;
@@ -861,7 +1062,12 @@ function X402Tab() {
         <Stat label="Total Hits" value={totalHits.toLocaleString()} />
         <Stat label="Active Endpoints" value={`${active}`} />
       </div>
-      <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Paywall Endpoints</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Paywall Endpoints</h3>
+        <button onClick={() => setShowRegister(true)} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          + Register Endpoint
+        </button>
+      </div>
       <DataTable
         headers={["Path", "Price", "Hits", "Revenue", "Status"]}
         rows={(endpoints ?? []).map((p) => [
@@ -872,6 +1078,23 @@ function X402Tab() {
           <Badge key="st" variant={p.isActive ? "success" : "default"}>{p.isActive ? "ACTIVE" : "DISABLED"}</Badge>,
         ])}
       />
+      {showRegister && (
+        <Modal title="Register x402 Endpoint" onClose={() => setShowRegister(false)}>
+          <Field label="Path">
+            <Input value={ePath} onChange={(e) => setEPath(e.target.value)} placeholder="/api/your-endpoint" />
+          </Field>
+          <Field label="Price (USDC)">
+            <Input value={ePrice} onChange={(e) => setEPrice(e.target.value)} type="number" placeholder="0.01" />
+          </Field>
+          <Field label="Description (optional)">
+            <Input value={eDesc} onChange={(e) => setEDesc(e.target.value)} placeholder="What does this endpoint do?" />
+          </Field>
+          {registerErr && <div style={{ color: "#f87171", fontSize: 13 }}>{registerErr}</div>}
+          <button onClick={registerEndpoint} disabled={registering} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: registering ? "not-allowed" : "pointer", opacity: registering ? 0.7 : 1, marginTop: 4 }}>
+            {registering ? "Registering…" : "Register Endpoint"}
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }
