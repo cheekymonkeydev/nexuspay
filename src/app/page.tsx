@@ -11,12 +11,12 @@ import {
 /* ═══════════════════════════════════════════════════════
    SIWE helpers
    ═══════════════════════════════════════════════════════ */
-function buildSiweMessage(address: string, nonce: string, domain: string, uri: string) {
+function buildSiweMessage(address: string, nonce: string, domain: string, uri: string, chainId: number) {
   return [
     `${domain} wants you to sign in with your Ethereum account:`,
     address, "",
     "Sign in to NexusPay Dashboard", "",
-    `URI: ${uri}`, "Version: 1", "Chain ID: 8453",
+    `URI: ${uri}`, "Version: 1", `Chain ID: ${chainId}`,
     `Nonce: ${nonce}`, `Issued At: ${new Date().toISOString()}`,
   ].join("\n");
 }
@@ -25,8 +25,10 @@ async function runSiwe(): Promise<string | null> {
   const ethereum = (window as any).ethereum;
   if (!ethereum) throw new Error("No wallet detected. Install MetaMask or Coinbase Wallet.");
   const [account] = await ethereum.request({ method: "eth_requestAccounts" });
+  const chainHex: string = await ethereum.request({ method: "eth_chainId" });
+  const chainId = parseInt(chainHex, 16);
   const { nonce } = await (await fetch("/api/auth/nonce")).json();
-  const message = buildSiweMessage(account, nonce, window.location.host, window.location.origin);
+  const message = buildSiweMessage(account, nonce, window.location.host, window.location.origin, chainId);
   const signature = await ethereum.request({ method: "personal_sign", params: [message, account] });
   const res = await fetch("/api/auth/verify", {
     method: "POST",
