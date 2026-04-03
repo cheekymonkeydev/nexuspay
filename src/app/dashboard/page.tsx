@@ -27,9 +27,13 @@ interface Paywall {
   id: string; path: string; priceUsdc: number; description?: string;
   isActive: boolean; totalPaid: number; hitCount: number;
 }
+interface ApiKey {
+  id: string; name: string; prefix: string; scopes: string[];
+  isActive: boolean; lastUsedAt: string | null; createdAt: string;
+}
 
 /* ═══ Constants ═══ */
-type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics";
+type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys";
 const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
@@ -38,6 +42,7 @@ const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "policies", label: "Policies", icon: "⊞" },
   { key: "x402", label: "x402", icon: "⚡" },
   { key: "analytics", label: "Analytics", icon: "◉" },
+  { key: "keys", label: "API Keys", icon: "⌗" },
 ];
 
 const statusVariant: Record<string, "success" | "warning" | "danger"> = {
@@ -114,16 +119,18 @@ function DataTable({ headers, rows }: { headers: string[]; rows: React.ReactNode
 }
 
 function Btn({ children, variant = "primary", onClick, disabled }: {
-  children: React.ReactNode; variant?: "primary" | "secondary" | "danger";
+  children: React.ReactNode; variant?: "primary" | "secondary" | "danger" | "default";
   onClick?: () => void; disabled?: boolean;
 }) {
   const bg = variant === "primary" ? "var(--gradient-brand)"
     : variant === "danger" ? "rgba(239,68,68,0.12)"
+    : variant === "default" ? "rgba(139,92,246,0.08)"
     : "transparent";
   const border = variant === "secondary" ? "1px solid var(--border-hover)"
     : variant === "danger" ? "1px solid rgba(239,68,68,0.25)"
+    : variant === "default" ? "1px solid rgba(139,92,246,0.2)"
     : "none";
-  const color = variant === "danger" ? "#f87171" : "white";
+  const color = variant === "danger" ? "#f87171" : variant === "default" ? "var(--violet-300)" : "white";
 
   return (
     <button onClick={onClick} disabled={disabled} style={{
@@ -239,6 +246,27 @@ function WalletDrawer({ wallet, txns, policies, onClose, onUpdate }: {
 }) {
   const [localStatus, setLocalStatus] = useState(wallet.status);
   const [toggling, setToggling] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const syncBalance = async () => {
+    setSyncing(true); setSyncResult(null);
+    try {
+      const res = await fetch("/api/wallets/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: wallet.agentId }),
+      });
+      const json = await res.json();
+      if (json.data?.synced) {
+        setSyncResult(`Synced: $${json.data.balanceUsdc.toFixed(2)}`);
+        onUpdate();
+      } else {
+        setSyncResult(json.data?.reason ?? "Not synced");
+      }
+    } catch { setSyncResult("Sync failed"); }
+    finally { setSyncing(false); }
+  };
 
   const agentTxns = txns.filter((t) => t.fromAgentId === wallet.agentId || t.toAgentId === wallet.agentId);
   const sentTxns = agentTxns.filter((t) => t.fromAgentId === wallet.agentId && t.status === "CONFIRMED");
@@ -487,13 +515,19 @@ function WalletDrawer({ wallet, txns, policies, onClose, onUpdate }: {
           {wallet.status !== "REVOKED" && (
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Wallet Actions</div>
-              <Btn
-                variant={localStatus === "ACTIVE" ? "danger" : "primary"}
-                onClick={toggleStatus}
-                disabled={toggling}
-              >
-                {toggling ? "Updating…" : localStatus === "ACTIVE" ? "Suspend Wallet" : "Reactivate Wallet"}
-              </Btn>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Btn onClick={syncBalance} disabled={syncing} variant="default">
+                  {syncing ? "Syncing…" : "Sync On-Chain Balance"}
+                </Btn>
+                {syncResult && <div style={{ fontSize: 12, color: "var(--cyan-400)", fontFamily: "var(--font-mono)" }}>{syncResult}</div>}
+                <Btn
+                  variant={localStatus === "ACTIVE" ? "danger" : "primary"}
+                  onClick={toggleStatus}
+                  disabled={toggling}
+                >
+                  {toggling ? "Updating…" : localStatus === "ACTIVE" ? "Suspend Wallet" : "Reactivate Wallet"}
+                </Btn>
+              </div>
             </div>
           )}
 
@@ -1203,6 +1237,109 @@ function AnalyticsTab() {
   );
 }
 
+/* ═══ API Keys Tab ═══ */
+function ApiKeysTab() {
+  const { data: keys, loading, error, refetch } = useApi<ApiKey[]>("/api/keys");
+  const [showCreate, setShowCreate] = useState(false);
+  const [keyName, setKeyName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function createKey() {
+    if (!keyName.trim()) { setCreateErr("Name is required"); return; }
+    setCreating(true); setCreateErr("");
+    try {
+      const res = await fetch("/api/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: keyName.trim(), scopes: ["*"] }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      setNewKey(json.data.key);
+      setKeyName("");
+      refetch();
+    } catch (e: unknown) {
+      setCreateErr(e instanceof Error ? e.message : "Error");
+    } finally { setCreating(false); }
+  }
+
+  async function revokeKey(id: string) {
+    try {
+      await fetch(`/api/keys/${id}`, { method: "DELETE" });
+      refetch();
+    } catch {}
+  }
+
+  function copyKey(val: string) {
+    navigator.clipboard.writeText(val);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (loading) return <Loader />;
+  if (error) return <ErrorMsg message={error} />;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>API Keys</h3>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Keys authenticate programmatic access via the <span style={{ fontFamily: "var(--font-mono)" }}>X-Api-Key</span> header.</p>
+        </div>
+        <button onClick={() => { setShowCreate(true); setNewKey(null); }} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          + Create Key
+        </button>
+      </div>
+
+      {newKey && (
+        <GlassCard style={{ padding: 20, border: "1px solid rgba(6,182,212,0.3)" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan-400)", marginBottom: 8, letterSpacing: "0.06em" }}>KEY CREATED — COPY NOW, IT WON&apos;T BE SHOWN AGAIN</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)", wordBreak: "break-all", flex: 1 }}>{newKey}</span>
+            <button onClick={() => copyKey(newKey)} style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)", borderRadius: 6, padding: "6px 12px", color: "var(--cyan-400)", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        </GlassCard>
+      )}
+
+      <DataTable
+        headers={["Name", "Prefix", "Scopes", "Last Used", "Status", ""]}
+        rows={(keys ?? []).map((k) => [
+          <span key="name" style={{ fontWeight: 600 }}>{k.name}</span>,
+          <MonoText key="prefix">{k.prefix}…</MonoText>,
+          <span key="scopes" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{k.scopes.join(", ")}</span>,
+          <span key="used" style={{ color: "var(--text-tertiary)", fontSize: 12 }}>{k.lastUsedAt ? timeAgo(k.lastUsedAt) : "Never"}</span>,
+          <Badge key="status" variant={k.isActive ? "success" : "default"}>{k.isActive ? "ACTIVE" : "REVOKED"}</Badge>,
+          k.isActive
+            ? <button key="revoke" onClick={() => revokeKey(k.id)} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, padding: "4px 10px", color: "#f87171", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Revoke</button>
+            : <span key="revoked" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</span>,
+        ])}
+      />
+
+      {showCreate && !newKey && (
+        <Modal title="Create API Key" onClose={() => setShowCreate(false)}>
+          <Field label="Key name">
+            <Input value={keyName} onChange={setKeyName} placeholder="e.g. production-agent" />
+          </Field>
+          <Field label="Scopes">
+            <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-secondary)", fontSize: 13, color: "var(--text-tertiary)" }}>
+              Full access <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>["*"]</span>
+            </div>
+          </Field>
+          {createErr && <div style={{ color: "#f87171", fontSize: 13 }}>{createErr}</div>}
+          <button onClick={createKey} disabled={creating} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.7 : 1, marginTop: 4 }}>
+            {creating ? "Creating…" : "Create Key"}
+          </button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 /* ═══ MAIN DASHBOARD ═══ */
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -1212,6 +1349,7 @@ export default function Dashboard() {
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
     p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, analytics: <AnalyticsTab />,
+    keys: <ApiKeysTab />,
   };
 
   return (
