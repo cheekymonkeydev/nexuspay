@@ -640,7 +640,8 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
 /* ═══ Tabs ═══ */
 function OverviewTab() {
   const { data: wallets, loading: wl } = useApi<Wallet[]>("/api/wallets");
-  const { data: txns, loading: tl } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: txPage, loading: tl } = useApi<TxPage>("/api/transactions?limit=100", 30_000);
+  const txns = txPage?.items;
 
   if (wl || tl) return <Loader />;
 
@@ -760,7 +761,8 @@ function OverviewTab() {
 
 function WalletsTab() {
   const { data: wallets, loading, error, refetch } = useApi<Wallet[]>("/api/wallets", 30_000);
-  const { data: txns } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: txPage } = useApi<TxPage>("/api/transactions?limit=100", 30_000);
+  const txns = txPage?.items;
   const { data: policies } = useApi<Policy[]>("/api/policies");
   const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
   const [selected, setSelected] = useState<Wallet | null>(null);
@@ -881,13 +883,15 @@ function WalletsTab() {
   );
 }
 
+interface TxPage { items: Tx[]; total: number; page: number; limit: number; pages: number; }
+
 function TransactionsTab() {
-  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
+  const [page, setPage] = useState(1);
   const [agentFilter, setAgentFilter] = useState("all");
-  const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [showSend, setShowSend] = useState(false);
   const [fromAgent, setFromAgent] = useState("");
   const [toAddr, setToAddr] = useState("");
@@ -896,7 +900,17 @@ function TransactionsTab() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
 
+  const params = new URLSearchParams({ page: String(page), limit: "20" });
+  if (agentFilter !== "all") params.set("agentId", agentFilter);
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  const { data, loading, error, refetch } = useApi<TxPage>(`/api/transactions?${params}`, 30_000);
+
+  const txns = data?.items ?? [];
   const agentIds = [...new Set((wallets ?? []).map((w) => w.agentId))];
+
+  // Reset to page 1 when filters change
+  const setAgent = (v: string) => { setAgentFilter(v); setPage(1); };
+  const setStatus = (v: string) => { setStatusFilter(v); setPage(1); };
 
   const sendTx = useCallback(async () => {
     if (!fromAgent || !toAddr || !amount) { setSendError("All fields required"); return; }
@@ -914,15 +928,6 @@ function TransactionsTab() {
     } catch { setSendError("Network error"); }
     finally { setSending(false); }
   }, [fromAgent, toAddr, amount, category, refetch]);
-
-  if (loading) return <Loader />;
-  if (error) return <ErrorMsg message={error} />;
-
-  const filtered = (txns ?? []).filter((t) => {
-    const matchAgent = agentFilter === "all" || t.fromAgentId === agentFilter || t.toAgentId === agentFilter;
-    const matchStatus = statusFilter === "all" || t.status === statusFilter;
-    return matchAgent && matchStatus;
-  });
 
   const filterBtnStyle = (active: boolean) => ({
     padding: "5px 12px", borderRadius: 99, fontSize: 12, fontWeight: 600,
@@ -945,26 +950,61 @@ function TransactionsTab() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Agent:</span>
             {["all", ...agentIds].map((id) => (
-              <button key={id} style={filterBtnStyle(agentFilter === id)} onClick={() => setAgentFilter(id)}>
+              <button key={id} style={filterBtnStyle(agentFilter === id)} onClick={() => setAgent(id)}>
                 {id === "all" ? "All" : id}
               </button>
             ))}
             <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
             <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Status:</span>
             {["all", "CONFIRMED", "PENDING", "FAILED", "REJECTED"].map((s) => (
-              <button key={s} style={filterBtnStyle(statusFilter === s)} onClick={() => setStatusFilter(s)}>
+              <button key={s} style={filterBtnStyle(statusFilter === s)} onClick={() => setStatus(s)}>
                 {s === "all" ? "All" : s}
               </button>
             ))}
           </div>
           <Btn onClick={() => setShowSend(true)}>+ Send Transaction</Btn>
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{filtered.length} of {txns?.length ?? 0} transactions</div>
-        {filtered.length === 0
+
+        {/* Count + pagination row */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+            {data ? `${data.total} total · page ${data.page} of ${data.pages}` : "Loading…"}
+          </div>
+          {data && data.pages > 1 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{
+                padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                background: "transparent", border: "1px solid var(--border)",
+                color: page === 1 ? "var(--text-tertiary)" : "var(--text)",
+                cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1,
+              }}>← Prev</button>
+              {Array.from({ length: Math.min(data.pages, 7) }, (_, i) => {
+                const p = data.pages <= 7 ? i + 1 : page <= 4 ? i + 1 : page >= data.pages - 3 ? data.pages - 6 + i : page - 3 + i;
+                return (
+                  <button key={p} onClick={() => setPage(p)} style={{
+                    width: 28, height: 28, borderRadius: 6, fontSize: 12, fontWeight: 600,
+                    background: p === page ? "rgba(139,92,246,0.12)" : "transparent",
+                    border: `1px solid ${p === page ? "var(--violet-500)" : "var(--border)"}`,
+                    color: p === page ? "var(--violet-300)" : "var(--text-tertiary)",
+                    cursor: "pointer",
+                  }}>{p}</button>
+                );
+              })}
+              <button onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={page === data.pages} style={{
+                padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                background: "transparent", border: "1px solid var(--border)",
+                color: page === data.pages ? "var(--text-tertiary)" : "var(--text)",
+                cursor: page === data.pages ? "not-allowed" : "pointer", opacity: page === data.pages ? 0.4 : 1,
+              }}>Next →</button>
+            </div>
+          )}
+        </div>
+
+        {loading ? <Loader /> : error ? <ErrorMsg message={error} /> : txns.length === 0
           ? <EmptyState icon="↗" title="No transactions found" sub="Try adjusting your filters, or send your first transaction" />
           : <DataTable
               headers={["From", "To", "Amount", "Category", "Status", "Hash", "Time"]}
-              rows={filtered.map((t) => [
+              rows={txns.map((t) => [
                 <span key="f" style={{ fontWeight: 500 }}>{t.fromAgentId}</span>,
                 <MonoText key="to">{truncAddr(t.toAgentId || t.toAddress)}</MonoText>,
                 <span key="a" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${t.amountUsdc < 0.01 ? t.amountUsdc.toFixed(4) : t.amountUsdc.toFixed(2)}</span>,
@@ -1013,7 +1053,8 @@ function TransactionsTab() {
 }
 
 function P2PTab() {
-  const { data: txns, loading, error, refetch } = useApi<Tx[]>("/api/transactions", 30_000);
+  const { data: txPage, loading, error, refetch } = useApi<TxPage>("/api/transactions?limit=100", 30_000);
+  const txns = txPage?.items ?? [];
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const [showModal, setShowModal] = useState(false);
   const [from, setFrom] = useState("");
@@ -1336,7 +1377,8 @@ function X402Tab() {
 }
 
 function AnalyticsTab() {
-  const { data: txns, loading } = useApi<Tx[]>("/api/transactions");
+  const { data: txPage, loading } = useApi<TxPage>("/api/transactions?limit=100");
+  const txns = txPage?.items;
   const { data: wallets } = useApi<Wallet[]>("/api/wallets");
 
   if (loading) return <Loader />;

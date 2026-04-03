@@ -11,17 +11,26 @@ export async function GET(req: NextRequest) {
   try {
     const agentId = req.nextUrl.searchParams.get("agentId");
     const status = req.nextUrl.searchParams.get("status");
+    const category = req.nextUrl.searchParams.get("category");
+    const page = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "20", 10)));
 
     const where: Record<string, unknown> = {};
     if (agentId) where.fromAgentId = agentId;
     if (status) where.status = status;
+    if (category) where.category = category;
 
-    const txns = await prisma.transaction.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-    return ok(txns);
+    const [txns, total] = await prisma.$transaction([
+      prisma.transaction.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.transaction.count({ where }),
+    ]);
+
+    return ok({ items: txns, total, page, limit, pages: Math.ceil(total / limit) });
   } catch (e) { return handleError(e); }
 }
 
