@@ -43,34 +43,63 @@ async function runSiwe(): Promise<string | null> {
 function ConnectWalletBtn() {
   const router = useRouter();
   const [address, setAddress] = useState<string | null>(null);
+  const [openMode, setOpenMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.address) setAddress(d.address);
-    });
+    fetch("/api/auth/me")
+      .then(r => r.json())
+      .then(d => {
+        if (d?.open) setOpenMode(true);
+        if (d?.address) setAddress(d.address);
+      })
+      .catch(() => {});
   }, []);
 
   const connect = useCallback(async () => {
     setLoading(true);
+    setErrMsg("");
     try {
       const addr = await runSiwe();
-      if (addr) { setAddress(addr); router.push("/dashboard"); }
-    } catch { /* user rejected */ }
-    finally { setLoading(false); }
+      if (addr) {
+        setAddress(addr);
+        router.push("/dashboard");
+      } else {
+        setErrMsg("Sign-in failed — check console for details");
+      }
+    } catch (e: any) {
+      if (e?.code !== 4001) setErrMsg(e?.message ?? "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
+  const btnStyle = {
+    padding: "9px 22px", borderRadius: 99,
+    background: "var(--gradient-brand)",
+    color: "white", fontSize: 13, fontWeight: 600,
+    display: "flex", alignItems: "center", gap: 8,
+    transition: "transform 0.25s, box-shadow 0.25s",
+    border: "none", cursor: "pointer",
+  } as const;
+
+  // Open mode — no auth required, just go straight to dashboard
+  if (openMode && !address) {
+    return (
+      <Link href="/dashboard" style={btnStyle}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+      >Open Dashboard</Link>
+    );
+  }
+
+  // Already authenticated
   if (address) {
     return (
-      <Link href="/dashboard" style={{
-        padding: "9px 22px", borderRadius: 99,
-        background: "var(--gradient-brand)",
-        color: "white", fontSize: 13, fontWeight: 600,
-        display: "flex", alignItems: "center", gap: 8,
-        transition: "transform 0.25s, box-shadow 0.25s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+      <Link href="/dashboard" style={btnStyle}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
       >
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan-400)", flexShrink: 0 }} />
         {address.slice(0, 6)}…{address.slice(-4)}
@@ -79,21 +108,24 @@ function ConnectWalletBtn() {
   }
 
   return (
-    <button onClick={connect} disabled={loading} style={{
-      padding: "9px 22px", borderRadius: 99,
-      background: loading ? "rgba(139,92,246,0.3)" : "var(--gradient-brand)",
-      color: "white", fontSize: 13, fontWeight: 600,
-      border: "none", cursor: loading ? "wait" : "pointer",
-      display: "flex", alignItems: "center", gap: 8,
-      transition: "transform 0.25s, box-shadow 0.25s",
-    }}
-    onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; } }}
-    onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-    >
-      {loading && <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite", display: "inline-block" }} />}
-      {loading ? "Check wallet…" : "Connect Wallet"}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+      <button onClick={connect} disabled={loading} style={{
+        ...btnStyle,
+        background: loading ? "rgba(139,92,246,0.35)" : "var(--gradient-brand)",
+        cursor: loading ? "wait" : "pointer",
+        opacity: loading ? 0.8 : 1,
+      }}
+      onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px var(--glow-violet)"; } }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+      >
+        {loading && <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite", display: "inline-block", flexShrink: 0 }} />}
+        {loading ? "Check wallet…" : "Connect Wallet"}
+      </button>
+      {errMsg && (
+        <div style={{ fontSize: 11, color: "#f87171", maxWidth: 200, textAlign: "right", lineHeight: 1.4 }}>{errMsg}</div>
+      )}
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </button>
+    </div>
   );
 }
 
