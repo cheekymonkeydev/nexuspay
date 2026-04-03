@@ -61,6 +61,14 @@ const SIDEBAR: SidebarSection[] = [
       { id: "keys-create", label: "Create API key" },
     ],
   },
+  {
+    id: "agentkit", label: "AgentKit Plugin",
+    children: [
+      { id: "agentkit-install", label: "Installation" },
+      { id: "agentkit-actions", label: "Actions reference" },
+      { id: "agentkit-multiagent", label: "Multi-agent example" },
+    ],
+  },
   { id: "errors", label: "Error Reference" },
 ];
 
@@ -661,6 +669,122 @@ function DocsContent() {
     "createdAt": "2026-04-01T12:15:00Z"
   }
 }`} />
+
+      <Divider />
+
+      {/* ── AgentKit ── */}
+      <H1 id="agentkit">AgentKit Plugin</H1>
+      <P>
+        <Code>nexuspay-agentkit</Code> is an official action provider for{" "}
+        <a href="https://docs.cdp.coinbase.com/agent-kit/welcome" target="_blank" rel="noopener noreferrer"
+          style={{ color: "var(--violet-300)", textDecoration: "none" }}>Coinbase AgentKit</a>.
+        Drop it into any AgentKit-powered agent to give it managed USDC wallets, spending policies,
+        P2P transfers, and x402 micropayments — no custom tool-wrapping required.
+      </P>
+
+      <H2 id="agentkit-install">Installation</H2>
+      <CodeBlock lang="bash" code={`npm install nexuspay-agentkit @coinbase/agentkit`} />
+      <P>Then wire it into your AgentKit setup:</P>
+      <CodeBlock lang="typescript" code={`import { AgentKit } from "@coinbase/agentkit";
+import { getLangChainTools } from "@coinbase/agentkit-langchain";
+import { nexusPayActionProvider } from "nexuspay-agentkit";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { ChatOpenAI } from "@langchain/openai";
+
+const agentKit = await AgentKit.from({
+  cdpApiKeyName: process.env.CDP_API_KEY_NAME!,
+  cdpApiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
+  actionProviders: [
+    nexusPayActionProvider({
+      baseUrl: process.env.NEXUSPAY_URL!,    // your NexusPay deployment
+      apiKey: process.env.NEXUSPAY_API_KEY!, // from Dashboard → API Keys
+    }),
+  ],
+});
+
+const tools = await getLangChainTools(agentKit);
+const agent = createReactAgent({
+  llm: new ChatOpenAI({ model: "gpt-4o" }),
+  tools,
+});`} />
+      <Callout>
+        The plugin works with any LLM framework that AgentKit supports — LangChain, LangGraph,
+        Vercel AI SDK, and plain tool arrays. <Code>nexusPayActionProvider</Code> is framework-agnostic.
+      </Callout>
+
+      <H2 id="agentkit-actions">Actions reference</H2>
+      <P>Every action returns a JSON string. The agent can read and reason over the response automatically.</P>
+      <div style={{
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-md)",
+        overflow: "hidden",
+        marginBottom: 28,
+      }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "rgba(15,15,24,0.7)", borderBottom: "1px solid var(--border-subtle)" }}>
+              {["Action", "Description"].map((h) => (
+                <th key={h} style={{
+                  padding: "11px 16px", textAlign: "left",
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
+                  color: "var(--text-tertiary)", textTransform: "uppercase",
+                }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["nexuspay_get_balance", "Get USDC balance for an agent wallet"],
+              ["nexuspay_list_wallets", "List all agent wallets and balances"],
+              ["nexuspay_create_wallet", "Create a new CDP-backed agent wallet on Base"],
+              ["nexuspay_send_payment", "Send USDC on-chain to any address"],
+              ["nexuspay_p2p_transfer", "Instant zero-gas transfer between agents"],
+              ["nexuspay_pay_x402", "Pay an x402 paywall to gain API access"],
+              ["nexuspay_list_transactions", "List recent transactions with filters"],
+              ["nexuspay_check_policies", "Check spending limits for an agent"],
+              ["nexuspay_create_policy", "Set spending limits for an agent wallet"],
+            ].map(([action, desc], i, arr) => (
+              <tr key={action} style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--border-subtle)" : "none" }}>
+                <td style={{ padding: "12px 16px", verticalAlign: "top" }}>
+                  <Code>{action}</Code>
+                </td>
+                <td style={{ padding: "12px 16px", fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 }}>{desc}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <P>Example prompts your agent will understand naturally:</P>
+      <CodeBlock lang="text" code={`"Check the balance of agent-researcher before sending the payment"
+"Transfer $2.50 to agent-writer for the content it generated"
+"Pay the inference API at /api/premium/gpt4 using agent-alpha's wallet"
+"Set a $10 daily limit on agent-beta's spending"
+"Show me the last 10 transactions from agent-alpha"`} />
+
+      <H2 id="agentkit-multiagent">Multi-agent example</H2>
+      <P>
+        Agent-to-agent payments are instant and zero-gas using P2P transfers. Orchestrators can
+        pay sub-agents programmatically without any human intervention.
+      </P>
+      <CodeBlock lang="typescript" code={`// Agent B just completed its task — pay it from the orchestrator
+await agent.invoke({
+  messages: [{
+    role: "user",
+    content: \`
+      Agent B finished the data analysis task.
+      Transfer $5 USDC from agent-orchestrator to agent-analyst as payment.
+      Then confirm the remaining balance on agent-orchestrator.
+    \`,
+  }],
+});
+
+// The agent will call:
+//   nexuspay_p2p_transfer({ fromAgentId: "agent-orchestrator", toAgentId: "agent-analyst", amountUsdc: 5 })
+//   nexuspay_get_balance({ agentId: "agent-orchestrator" })`} />
+      <Callout>
+        P2P transfers settle instantly with no gas fees. On-chain settlement via{" "}
+        <Code>nexuspay_send_payment</Code> is for external addresses and takes one Base block (~2 s).
+      </Callout>
 
       <Divider />
 

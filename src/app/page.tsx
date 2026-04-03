@@ -567,7 +567,7 @@ export default function LandingPage() {
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>NexusPay</span>
         </Link>
         <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
-          {["Features", "How It Works", "Use Cases", "SDK"].map((item) => (
+          {["Features", "How It Works", "Use Cases", "SDK", "AgentKit"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -1019,6 +1019,157 @@ export default function LandingPage() {
                 color: "var(--text-secondary)",
               }}>{pill}</div>
             ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* ═══ AgentKit ═══ */}
+      <Section id="agentkit" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="cyan">Coinbase AgentKit</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            Native <GradientText>AgentKit</GradientText> integration
+          </h2>
+          <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 16, maxWidth: 560, margin: "12px auto 0" }}>
+            One import gives your AgentKit agent 9 payment actions — wallets, policies, P2P transfers, and x402 micropayments.
+          </p>
+        </div>
+
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          {/* Install command */}
+          <div data-reveal style={{
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            background: "rgba(9,9,15,0.9)",
+            overflow: "hidden",
+            backdropFilter: "blur(20px)",
+            marginBottom: 24,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 20px",
+              borderBottom: "1px solid var(--border-subtle)",
+              background: "rgba(15,15,24,0.6)",
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>TERMINAL</span>
+              <a
+                href="https://www.npmjs.com/package/nexuspay-agentkit"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "4px 12px", borderRadius: 99,
+                  background: "rgba(6,182,212,0.08)",
+                  border: "1px solid rgba(6,182,212,0.2)",
+                  fontSize: 11, fontWeight: 600, color: "var(--cyan-400)",
+                  fontFamily: "var(--font-mono)",
+                  transition: "background 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(6,182,212,0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(6,182,212,0.08)")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3v4M8 3v4M16 17v4M8 17v4"/></svg>
+                npm
+              </a>
+            </div>
+            <pre style={{
+              padding: "20px 24px",
+              fontFamily: "var(--font-mono)", fontSize: 15, lineHeight: 1.6,
+              color: "var(--cyan-400)", margin: 0,
+            }}>
+              <span style={{ color: "var(--text-tertiary)", userSelect: "none" }}>$ </span>
+              npm install nexuspay-agentkit @coinbase/agentkit
+            </pre>
+          </div>
+
+          {/* Code example */}
+          <div data-reveal data-reveal-delay="100" style={{
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            background: "rgba(9,9,15,0.9)",
+            overflow: "hidden",
+            backdropFilter: "blur(20px)",
+            marginBottom: 32,
+          }}>
+            <div style={{
+              padding: "10px 20px",
+              borderBottom: "1px solid var(--border-subtle)",
+              background: "rgba(15,15,24,0.6)",
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em", textTransform: "uppercase" }}>TypeScript</span>
+            </div>
+            <pre style={{
+              padding: "24px",
+              fontFamily: "var(--font-mono)", fontSize: 13, lineHeight: 1.75,
+              color: "var(--violet-200)", margin: 0, overflowX: "auto",
+            }}>{`import { AgentKit } from "@coinbase/agentkit";
+import { nexusPayActionProvider } from "nexuspay-agentkit";
+
+const agentKit = await AgentKit.from({
+  cdpApiKeyName: process.env.CDP_API_KEY_NAME!,
+  cdpApiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
+  actionProviders: [
+    nexusPayActionProvider({
+      baseUrl: process.env.NEXUSPAY_URL!,
+      apiKey: process.env.NEXUSPAY_API_KEY!,
+    }),
+  ],
+});
+
+// Your agent now understands natural language payments:
+// "Transfer $5 to agent-writer for the article it generated"
+// "Check agent-alpha's balance before approving the request"
+// "Pay the inference API at /api/premium/gpt4"
+// "Set a $10 daily spending limit on agent-beta"`}</pre>
+          </div>
+
+          {/* Action grid */}
+          <div data-reveal data-reveal-delay="160" style={{
+            display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12,
+            marginBottom: 32,
+          }}>
+            {[
+              { action: "nexuspay_get_balance", desc: "Check wallet balance" },
+              { action: "nexuspay_create_wallet", desc: "Provision agent wallet" },
+              { action: "nexuspay_send_payment", desc: "On-chain USDC payment" },
+              { action: "nexuspay_p2p_transfer", desc: "Instant agent transfer" },
+              { action: "nexuspay_pay_x402", desc: "Auto-pay HTTP 402" },
+              { action: "nexuspay_create_policy", desc: "Set spending limits" },
+              { action: "nexuspay_check_policies", desc: "Audit spending rules" },
+              { action: "nexuspay_list_transactions", desc: "Transaction history" },
+              { action: "nexuspay_list_wallets", desc: "List all wallets" },
+            ].map(({ action, desc }) => (
+              <div key={action} style={{
+                padding: "14px 16px",
+                borderRadius: "var(--radius-md)",
+                background: "rgba(139,92,246,0.04)",
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--cyan-400)", fontWeight: 600, marginBottom: 4 }}>{action}</div>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div data-reveal data-reveal-delay="200" style={{ textAlign: "center" }}>
+            <a
+              href="/docs#agentkit"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "10px 24px", borderRadius: 99,
+                border: "1px solid rgba(6,182,212,0.3)",
+                background: "rgba(6,182,212,0.06)",
+                fontSize: 13, fontWeight: 600, color: "var(--cyan-400)",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.12)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.5)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(6,182,212,0.06)"; e.currentTarget.style.borderColor = "rgba(6,182,212,0.3)"; }}
+            >
+              View AgentKit docs →
+            </a>
           </div>
         </div>
       </Section>
