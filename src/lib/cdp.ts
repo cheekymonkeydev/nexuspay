@@ -1,24 +1,36 @@
 /**
- * Coinbase CDP SDK integration for wallet creation and USDC transfers on Base.
- * Falls back to simulated local addresses when CDP keys are not configured.
+ * Coinbase CDP SDK integration — wallet creation and USDC transfers on Base.
+ * Falls back to simulation when CDP keys are not configured.
  */
 
 let Coinbase: unknown = null;
 let Wallet: unknown = null;
+let cdpReady: boolean | null = null; // null = not yet checked
 
-async function loadCDP() {
-  if (!process.env.CDP_API_KEY_NAME || !process.env.CDP_API_KEY_PRIVATE_KEY) return false;
+async function loadCDP(): Promise<boolean> {
+  if (cdpReady !== null) return cdpReady;
+
+  if (!process.env.CDP_API_KEY_NAME || !process.env.CDP_API_KEY_PRIVATE_KEY) {
+    cdpReady = false;
+    return false;
+  }
+
   try {
     const sdk = await import("@coinbase/coinbase-sdk");
     Coinbase = sdk.Coinbase;
     Wallet = sdk.Wallet;
-    (Coinbase as { configure: (opts: { apiKeyName: string; privateKey: string }) => void }).configure({
-      apiKeyName: process.env.CDP_API_KEY_NAME!,
-      privateKey: process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n"),
+    (Coinbase as {
+      configure: (opts: { apiKeyName: string; privateKey: string }) => void;
+    }).configure({
+      apiKeyName: process.env.CDP_API_KEY_NAME,
+      privateKey: process.env.CDP_API_KEY_PRIVATE_KEY.replace(/\\n/g, "\n"),
     });
+    cdpReady = true;
+    console.info("[CDP] Initialized — network:", process.env.NETWORK ?? "base-sepolia");
     return true;
-  } catch {
-    console.warn("[CDP] SDK not available, using simulation mode");
+  } catch (e) {
+    console.warn("[CDP] SDK init failed, using simulation mode:", e);
+    cdpReady = false;
     return false;
   }
 }
@@ -28,45 +40,85 @@ function randomAddress(): string {
   return "0x" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createCDPWallet(): Promise<{ address: string; cdpWalletId: string | null }> {
+function randomHash(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return "0x" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* ─── Status ─── */
+export async function getCDPStatus(): Promise<{
+  mode: "live" | "simulated";
+  configured: boolean;
+  network: string;
+}> {
+  const configured = !!(process.env.CDP_API_KEY_NAME && process.env.CDP_API_KEY_PRIVATE_KEY);
+  const ready = await loadCDP();
+  return {
+    mode: ready ? "live" : "simulated",
+    configured,
+    network: process.env.NETWORK ?? "base-sepolia",
+  };
+}
+
+/* ─── Wallet creation ─── */
+export async function createCDPWallet(): Promise<{
+  address: string;
+  cdpWalletId: string | null;
+  simulated: boolean;
+}> {
   const ready = await loadCDP();
   if (ready && Wallet) {
     try {
-      const wallet = await (Wallet as { create: (opts: { networkId: string }) => Promise<{ getDefaultAddress: () => Promise<{ getId: () => string }>; getId: () => string }> }).create({
-        networkId: process.env.NETWORK || "base-sepolia",
+      const WalletCls = Wallet as {
+        create: (opts: { networkId: string }) => Promise<{
+          getDefaultAddress: () => Promise<{ getId: () => string }>;
+          getId: () => string;
+        }>;
+      };
+      const wallet = await WalletCls.create({
+        networkId: process.env.NETWORK ?? "base-sepolia",
       });
       const addr = await wallet.getDefaultAddress();
-      return { address: addr.getId(), cdpWalletId: wallet.getId() };
+      return { address: addr.getId(), cdpWalletId: wallet.getId(), simulated: false };
     } catch (e) {
-      console.warn("[CDP] Wallet creation failed, falling back to local:", e);
+      console.warn("[CDP] Wallet creation failed, falling back to simulation:", e);
     }
   }
-  return { address: randomAddress(), cdpWalletId: null };
+
+  return { address: randomAddress(), cdpWalletId: null, simulated: true };
 }
 
+/* ─── USDC transfer ─── */
 export async function sendUSDC(
   fromCdpWalletId: string | null,
   toAddress: string,
   amountUsdc: number
-): Promise<{ txHash: string; settled: boolean }> {
+): Promise<{ txHash: string; simulated: boolean }> {
   const ready = await loadCDP();
   if (ready && Wallet && fromCdpWalletId) {
     try {
-      const WalletClass = Wallet as { fetch: (id: string) => Promise<{ createTransfer: (opts: { amount: number; assetId: string; destination: string; networkId: string }) => Promise<{ getTransactionHash: () => string }> }> };
-      const wallet = await WalletClass.fetch(fromCdpWalletId);
+      const WalletCls = Wallet as {
+        fetch: (id: string) => Promise<{
+          createTransfer: (opts: {
+            amount: number;
+            assetId: string;
+            destination: string;
+            networkId: string;
+          }) => Promise<{ getTransactionHash: () => string }>;
+        }>;
+      };
+      const wallet = await WalletCls.fetch(fromCdpWalletId);
       const transfer = await wallet.createTransfer({
         amount: amountUsdc,
         assetId: "usdc",
         destination: toAddress,
-        networkId: process.env.NETWORK || "base-sepolia",
+        networkId: process.env.NETWORK ?? "base-sepolia",
       });
-      return { txHash: transfer.getTransactionHash(), settled: true };
+      return { txHash: transfer.getTransactionHash(), simulated: false };
     } catch (e) {
-      console.warn("[CDP] Transfer failed, simulating:", e);
+      console.warn("[CDP] Transfer failed, falling back to simulation:", e);
     }
   }
-  // Simulate
-  const simHash = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map((b) => b.toString(16).padStart(2, "0")).join("");
-  return { txHash: simHash, settled: false };
+
+  return { txHash: randomHash(), simulated: true };
 }

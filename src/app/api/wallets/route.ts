@@ -3,8 +3,10 @@ import { prisma } from "@/lib/db";
 import { createCDPWallet } from "@/lib/cdp";
 import { CreateWalletInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
+import { authenticate } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const wallets = await prisma.agentWallet.findMany({
       orderBy: { createdAt: "desc" },
@@ -15,6 +17,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const body = await req.json();
     const input = CreateWalletInput.parse(body);

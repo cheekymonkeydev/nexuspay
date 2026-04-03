@@ -4,8 +4,10 @@ import { sendUSDC } from "@/lib/cdp";
 import { SendTransactionInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
 import { enforcePolicies } from "@/lib/policy";
+import { authenticate } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const agentId = req.nextUrl.searchParams.get("agentId");
     const status = req.nextUrl.searchParams.get("status");
@@ -24,6 +26,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const body = await req.json();
     const input = SendTransactionInput.parse(body);

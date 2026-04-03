@@ -2,11 +2,13 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { RegisterCredentialInput } from "@/lib/types";
 import { ok, err, handleError, nanoid } from "@/lib/utils";
+import { authenticate } from "@/lib/auth";
 import { SignJWT } from "jose";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "dev-secret");
 
 export async function GET(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const agentId = req.nextUrl.searchParams.get("agentId");
     const where = agentId ? { agentId } : {};
@@ -16,6 +18,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const body = await req.json();
     const input = RegisterCredentialInput.parse(body);

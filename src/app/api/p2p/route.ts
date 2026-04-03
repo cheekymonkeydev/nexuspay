@@ -3,8 +3,10 @@ import { prisma } from "@/lib/db";
 import { P2PTransferInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
 import { enforcePolicies } from "@/lib/policy";
+import { authenticate } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const body = await req.json();
     const input = P2PTransferInput.parse(body);

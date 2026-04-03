@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { NexusLogo, AmbientGlow, GlassCard, Badge, useScrollReveal } from "@/components/shared";
 import { useApi } from "@/lib/hooks";
@@ -983,7 +984,14 @@ function AnalyticsTab() {
 /* ═══ MAIN DASHBOARD ═══ */
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("overview");
+  const router = useRouter();
+  const { data: system } = useApi<{ cdp: string; database: string; cdpNetwork: string }>("/api/system");
   useScrollReveal();
+
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+  }, [router]);
 
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
@@ -1031,11 +1039,30 @@ export default function Dashboard() {
           ))}
         </nav>
 
-        <div style={{ margin: "0 14px 10px", padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.1)", fontSize: 11, color: "var(--violet-300)", textAlign: "center", fontWeight: 600, fontFamily: "var(--font-mono)" }}>BASE SEPOLIA</div>
-        <Link href="/docs" style={{ margin: "0 14px", padding: "9px 14px", borderRadius: "var(--radius-sm)", background: "transparent", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", textDecoration: "none" }}
+        {/* CDP status */}
+        <div style={{ margin: "0 14px 8px", padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.1)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>Network</span>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", color: "var(--violet-300)", fontFamily: "var(--font-mono)" }}>{(system?.cdpNetwork ?? "base-sepolia").toUpperCase()}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>CDP</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: system?.cdp === "live" ? "var(--cyan-400)" : "#f59e0b", boxShadow: system?.cdp === "live" ? "0 0 6px var(--cyan-400)" : "0 0 6px #f59e0b" }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: system?.cdp === "live" ? "var(--cyan-400)" : "#f59e0b", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
+                {system?.cdp === "live" ? "LIVE" : system ? "SIMULATED" : "…"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <Link href="/docs" style={{ margin: "0 14px 6px", padding: "9px 14px", borderRadius: "var(--radius-sm)", display: "block", background: "transparent", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", textDecoration: "none" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.borderColor = "var(--border)"; }}
         >API Docs →</Link>
+        <button onClick={logout} style={{ margin: "0 14px", padding: "9px 14px", borderRadius: "var(--radius-sm)", background: "transparent", border: "1px solid rgba(248,113,113,0.2)", fontSize: 12, color: "rgba(248,113,113,0.7)", textAlign: "center", fontWeight: 600, transition: "all 0.2s", width: "calc(100% - 28px)", cursor: "pointer" }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(248,113,113,0.4)"; e.currentTarget.style.background = "rgba(248,113,113,0.05)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(248,113,113,0.7)"; e.currentTarget.style.borderColor = "rgba(248,113,113,0.2)"; e.currentTarget.style.background = "transparent"; }}
+        >Sign Out</button>
       </aside>
 
       {/* Main */}

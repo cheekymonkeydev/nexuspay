@@ -2,9 +2,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { RegisterPaywallInput, PaywallPaymentInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
+import { authenticate } from "@/lib/auth";
 
-// Register a paywall endpoint
+// Register a paywall endpoint or process a payment
 export async function POST(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const body = await req.json();
 
@@ -58,7 +60,8 @@ async function handlePayment(input: { path: string; agentId: string }) {
   return ok({ access: true, charged: endpoint.priceUsdc, endpoint: endpoint.path });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const endpoints = await prisma.paywallEndpoint.findMany({ orderBy: { createdAt: "desc" } });
     return ok(endpoints);

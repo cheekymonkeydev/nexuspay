@@ -1,9 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { CreateApiKeyInput } from "@/lib/types";
-import { ok, handleError, nanoid, sha256 } from "@/lib/utils";
+import { ok, err, handleError, nanoid, sha256 } from "@/lib/utils";
+import { authenticate } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const body = await req.json();
     const input = CreateApiKeyInput.parse(body);
@@ -21,7 +23,8 @@ export async function POST(req: NextRequest) {
   } catch (e) { return handleError(e); }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!await authenticate(req)) return err("Unauthorized", 401);
   try {
     const keys = await prisma.apiKey.findMany({
       select: { id: true, name: true, prefix: true, scopes: true, isActive: true, lastUsedAt: true, createdAt: true },
