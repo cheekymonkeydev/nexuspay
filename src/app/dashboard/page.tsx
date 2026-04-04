@@ -1984,25 +1984,41 @@ function WebhooksTab() {
   if (loading) return <Loader />;
   if (error) return <ErrorMsg message={error} />;
 
+  const addBtn = (
+    <button
+      onClick={() => { setShowCreate(true); setNewSecret(null); }}
+      style={{
+        background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+        color: "#fff", border: "none", borderRadius: 8,
+        padding: "9px 18px", fontSize: 13, fontWeight: 700,
+        cursor: "pointer", whiteSpace: "nowrap",
+        boxShadow: "0 0 16px rgba(139,92,246,0.35)",
+        transition: "box-shadow 0.2s, transform 0.15s",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 0 24px rgba(139,92,246,0.55)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 0 16px rgba(139,92,246,0.35)"; e.currentTarget.style.transform = "translateY(0)"; }}
+    >
+      + Add Webhook
+    </button>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Webhooks</h3>
-          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4, maxWidth: 500 }}>
-            NexusPay POSTs a signed JSON payload to your URL whenever a transaction event occurs. Verify the <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>X-NexusPay-Signature</span> header using your webhook secret.
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4, maxWidth: 480 }}>
+            Get notified instantly when payments happen — no polling required. NexusPay sends a secure HTTP request to your server the moment a transaction is confirmed, fails, or gets blocked.
           </p>
         </div>
-        <button onClick={() => { setShowCreate(true); setNewSecret(null); }} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-          + Add Webhook
-        </button>
+        {(webhooks ?? []).length > 0 && addBtn}
       </div>
 
       {/* Secret reveal banner */}
       {newSecret && (
         <GlassCard style={{ padding: 20, border: "1px solid rgba(6,182,212,0.3)" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan-400)", marginBottom: 4, letterSpacing: "0.06em" }}>WEBHOOK SECRET — COPY NOW, WON&apos;T BE SHOWN AGAIN</div>
-          <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>Use this to verify the <span style={{ fontFamily: "var(--font-mono)" }}>X-NexusPay-Signature</span> header on incoming requests.</div>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>Use this to verify that incoming requests are genuinely from NexusPay.</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", wordBreak: "break-all", flex: 1 }}>{newSecret}</span>
             <button onClick={() => copySecret(newSecret)} style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)", borderRadius: 6, padding: "6px 12px", color: "var(--cyan-400)", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -2021,9 +2037,36 @@ if (expected !== req.headers["x-nexuspay-signature"]) {
         </GlassCard>
       )}
 
-      {/* Webhook list */}
+      {/* Empty / onboarding state */}
       {(webhooks ?? []).length === 0 && !newSecret ? (
-        <EmptyState icon="⇡" title="No webhooks yet" sub='Click "+ Add Webhook" to start receiving real-time transaction events' />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Main CTA card */}
+          <GlassCard style={{ padding: 36, textAlign: "center", border: "1px solid rgba(139,92,246,0.15)" }}>
+            <div style={{ fontSize: 36, marginBottom: 14 }}>⇡</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8 }}>
+              Get notified when payments happen
+            </div>
+            <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 24px" }}>
+              Connect any URL — your own server, Slack, Zapier, or Make — and NexusPay will send you a real-time notification every time a transaction is confirmed, fails, or gets blocked by a spending policy.
+            </p>
+            {addBtn}
+          </GlassCard>
+
+          {/* Use case examples */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            {[
+              { icon: "💬", title: "Slack alerts", desc: "Post a message to your team channel every time an agent spends money or a payment fails." },
+              { icon: "🔁", title: "Trigger workflows", desc: "Kick off a Zapier or Make automation when a transaction is confirmed or rejected." },
+              { icon: "🗃️", title: "Sync your database", desc: "Write every transaction to your own records in real time without polling the API." },
+            ].map(({ icon, title, desc }) => (
+              <GlassCard key={title} style={{ padding: 20 }}>
+                <div style={{ fontSize: 22, marginBottom: 10 }}>{icon}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{title}</div>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6 }}>{desc}</div>
+              </GlassCard>
+            ))}
+          </div>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {(webhooks ?? []).map((wh) => (
