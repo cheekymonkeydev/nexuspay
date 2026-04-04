@@ -4,6 +4,7 @@ import { P2PTransferInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
 import { enforcePolicies } from "@/lib/policy";
 import { authenticate } from "@/lib/auth";
+import { deliverWebhook } from "@/lib/webhooks";
 
 export async function POST(req: NextRequest) {
   if (!await authenticate(req)) return err("Unauthorized", 401);
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
+    deliverWebhook("transaction.confirmed", tx);
     return ok(tx);
   } catch (e) { return handleError(e); }
 }
