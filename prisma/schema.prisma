@@ -138,3 +138,33 @@ model PaywallEndpoint {
 
   @@map("paywall_endpoints")
 }
+
+model Webhook {
+  id          String   @id @default(cuid())
+  url         String
+  secret      String
+  events      String[]
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  webhookId   String
+  event       String
+  payload     Json
+  statusCode  Int?
+  success     Boolean  @default(false)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_deliveries")
+}

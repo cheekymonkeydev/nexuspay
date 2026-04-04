@@ -5,6 +5,7 @@ import { SendTransactionInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
 import { enforcePolicies } from "@/lib/policy";
 import { authenticate } from "@/lib/auth";
+import { deliverWebhook } from "@/lib/webhooks";
 
 export async function GET(req: NextRequest) {
   if (!await authenticate(req)) return err("Unauthorized", 401);
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     });
     if (!policyResult.passed) {
       // Create rejected transaction for audit trail
-      await prisma.transaction.create({
+      const rejected = await prisma.transaction.create({
         data: {
           fromAgentId: input.fromAgentId,
           toAddress: input.toAddress,
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
           failureReason: policyResult.failureReason,
         },
       });
+      deliverWebhook("transaction.rejected", rejected);
       return err(policyResult.failureReason || "Policy check failed", 403);
     }
 
@@ -103,10 +105,11 @@ export async function POST(req: NextRequest) {
         data: { status: "CONFIRMED", txHash },
       });
 
+      deliverWebhook("transaction.confirmed", confirmed);
       return ok(confirmed);
     } catch (settlementError) {
       // Settlement failed — refund balance and mark transaction FAILED
-      await prisma.$transaction([
+      const [, failed] = await prisma.$transaction([
         prisma.agentWallet.update({
           where: { agentId: input.fromAgentId },
           data: { balanceUsdc: { increment: input.amountUsdc } },
@@ -119,6 +122,7 @@ export async function POST(req: NextRequest) {
           },
         }),
       ]);
+      deliverWebhook("transaction.failed", failed);
 
       return err("On-chain settlement failed — balance refunded", 502);
     }

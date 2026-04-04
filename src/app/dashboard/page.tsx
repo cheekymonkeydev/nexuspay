@@ -106,7 +106,7 @@ function WalletStatus() {
 }
 
 /* ═══ Constants ═══ */
-type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys";
+type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "webhooks";
 const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
@@ -116,6 +116,7 @@ const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "x402", label: "x402", icon: "⚡" },
   { key: "analytics", label: "Analytics", icon: "◉" },
   { key: "keys", label: "API Keys", icon: "⌗" },
+  { key: "webhooks", label: "Webhooks", icon: "⇡" },
 ];
 
 const statusVariant: Record<string, "success" | "warning" | "danger"> = {
@@ -1815,6 +1816,197 @@ function ApiKeysTab() {
   );
 }
 
+/* ═══ Webhooks Tab ═══ */
+interface WebhookDelivery { id: string; event: string; success: boolean; statusCode: number | null; error: string | null; createdAt: string; }
+interface WebhookItem { id: string; url: string; events: string[]; description: string | null; isActive: boolean; createdAt: string; secret?: string; _count: { deliveries: number }; deliveries: WebhookDelivery[]; }
+
+const ALL_EVENTS = ["transaction.confirmed", "transaction.failed", "transaction.rejected", "wallet.created", "wallet.suspended"];
+
+function WebhooksTab() {
+  const { data: webhooks, loading, error, refetch } = useApi<WebhookItem[]>("/api/webhooks");
+  const [showCreate, setShowCreate] = useState(false);
+  const [url, setUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [selectedEvents, setSelectedEvents] = useState<string[]>(["transaction.confirmed", "transaction.failed", "transaction.rejected"]);
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+  const [newSecret, setNewSecret] = useState<string | null>(null);
+  const [secretCopied, setSecretCopied] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  function toggleEvent(e: string) {
+    setSelectedEvents((prev) => prev.includes(e) ? prev.filter((x) => x !== e) : [...prev, e]);
+  }
+
+  async function createWebhook() {
+    if (!url.trim()) { setCreateErr("URL is required"); return; }
+    if (selectedEvents.length === 0) { setCreateErr("Select at least one event"); return; }
+    setCreating(true); setCreateErr("");
+    try {
+      const res = await fetch("/api/webhooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim(), events: selectedEvents, description: description.trim() || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to create webhook");
+      setNewSecret(json.data.secret);
+      setUrl(""); setDescription(""); setSelectedEvents(["transaction.confirmed", "transaction.failed", "transaction.rejected"]);
+      setShowCreate(false);
+      refetch();
+    } catch (e: unknown) {
+      setCreateErr(e instanceof Error ? e.message : "Error");
+    } finally { setCreating(false); }
+  }
+
+  async function toggleActive(id: string, current: boolean) {
+    try {
+      await fetch(`/api/webhooks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !current }) });
+      refetch();
+    } catch {}
+  }
+
+  async function deleteWebhook(id: string) {
+    try {
+      await fetch(`/api/webhooks/${id}`, { method: "DELETE" });
+      refetch();
+    } catch {}
+  }
+
+  function copySecret(s: string) {
+    navigator.clipboard.writeText(s);
+    setSecretCopied(true);
+    setTimeout(() => setSecretCopied(false), 2000);
+  }
+
+  if (loading) return <Loader />;
+  if (error) return <ErrorMsg message={error} />;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Webhooks</h3>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4, maxWidth: 500 }}>
+            NexusPay POSTs a signed JSON payload to your URL whenever a transaction event occurs. Verify the <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>X-NexusPay-Signature</span> header using your webhook secret.
+          </p>
+        </div>
+        <button onClick={() => { setShowCreate(true); setNewSecret(null); }} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+          + Add Webhook
+        </button>
+      </div>
+
+      {/* Secret reveal banner */}
+      {newSecret && (
+        <GlassCard style={{ padding: 20, border: "1px solid rgba(6,182,212,0.3)" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan-400)", marginBottom: 4, letterSpacing: "0.06em" }}>WEBHOOK SECRET — COPY NOW, WON&apos;T BE SHOWN AGAIN</div>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>Use this to verify the <span style={{ fontFamily: "var(--font-mono)" }}>X-NexusPay-Signature</span> header on incoming requests.</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", wordBreak: "break-all", flex: 1 }}>{newSecret}</span>
+            <button onClick={() => copySecret(newSecret)} style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)", borderRadius: 6, padding: "6px 12px", color: "var(--cyan-400)", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {secretCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.12)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.06em", marginBottom: 6 }}>VERIFY IN YOUR SERVER</div>
+            <pre style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--violet-200)", margin: 0, overflowX: "auto", lineHeight: 1.7 }}>{`const sig = crypto.createHmac("sha256", secret)
+  .update(rawBody).digest("hex");
+const expected = \`sha256=\${sig}\`;
+if (expected !== req.headers["x-nexuspay-signature"]) {
+  return res.status(401).send("Invalid signature");
+}`}</pre>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Webhook list */}
+      {(webhooks ?? []).length === 0 && !newSecret ? (
+        <EmptyState icon="⇡" title="No webhooks yet" sub='Click "+ Add Webhook" to start receiving real-time transaction events' />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {(webhooks ?? []).map((wh) => (
+            <GlassCard key={wh.id} style={{ padding: 0, overflow: "hidden" }}>
+              {/* Header row */}
+              <div style={{ padding: "16px 20px", display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--text)", wordBreak: "break-all" }}>{wh.url}</span>
+                    <Badge variant={wh.isActive ? "success" : "default"}>{wh.isActive ? "ACTIVE" : "PAUSED"}</Badge>
+                  </div>
+                  {wh.description && <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 8 }}>{wh.description}</div>}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {wh.events.map((ev) => (
+                      <span key={ev} style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "var(--violet-300)" }}>{ev}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+                  <button onClick={() => setExpanded(expanded === wh.id ? null : wh.id)} style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", color: "var(--text-tertiary)", cursor: "pointer" }}>
+                    {expanded === wh.id ? "Hide" : `Logs (${wh._count.deliveries})`}
+                  </button>
+                  <button onClick={() => toggleActive(wh.id, wh.isActive)} style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: wh.isActive ? "rgba(234,179,8,0.08)" : "rgba(6,182,212,0.08)", border: `1px solid ${wh.isActive ? "rgba(234,179,8,0.2)" : "rgba(6,182,212,0.2)"}`, color: wh.isActive ? "#fde047" : "var(--cyan-400)", cursor: "pointer" }}>
+                    {wh.isActive ? "Pause" : "Enable"}
+                  </button>
+                  <button onClick={() => deleteWebhook(wh.id)} style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", cursor: "pointer" }}>Delete</button>
+                </div>
+              </div>
+
+              {/* Delivery logs */}
+              {expanded === wh.id && (
+                <div style={{ borderTop: "1px solid var(--border-subtle)", padding: "12px 20px 16px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Recent Deliveries</div>
+                  {wh.deliveries.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "var(--text-tertiary)", padding: "12px 0" }}>No deliveries yet</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {wh.deliveries.map((d) => (
+                        <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 6, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-subtle)" }}>
+                          <span style={{ fontSize: 14 }}>{d.success ? "✓" : "✗"}</span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: d.success ? "var(--cyan-400)" : "#f87171", flex: 1 }}>{d.event}</span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>{d.statusCode ?? "—"}</span>
+                          {d.error && <span style={{ fontSize: 11, color: "#f87171", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.error}</span>}
+                          <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{timeAgo(d.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </GlassCard>
+          ))}
+        </div>
+      )}
+
+      {/* Create modal */}
+      {showCreate && (
+        <Modal title="Add Webhook" onClose={() => { setShowCreate(false); setCreateErr(""); }}>
+          <Field label="Endpoint URL">
+            <Input value={url} onChange={setUrl} placeholder="https://your-server.com/webhooks/nexuspay" />
+          </Field>
+          <Field label="Description (optional)">
+            <Input value={description} onChange={setDescription} placeholder="e.g. Notify Slack on payment" />
+          </Field>
+          <Field label="Events">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {ALL_EVENTS.map((ev) => (
+                <label key={ev} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "8px 12px", borderRadius: 6, background: selectedEvents.includes(ev) ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${selectedEvents.includes(ev) ? "rgba(139,92,246,0.25)" : "var(--border)"}`, transition: "all 0.15s" }}>
+                  <input type="checkbox" checked={selectedEvents.includes(ev)} onChange={() => toggleEvent(ev)} style={{ accentColor: "var(--violet-400)", width: 14, height: 14 }} />
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: selectedEvents.includes(ev) ? "var(--violet-300)" : "var(--text-secondary)" }}>{ev}</span>
+                </label>
+              ))}
+            </div>
+          </Field>
+          {createErr && <div style={{ fontSize: 13, color: "#f87171", marginBottom: 4 }}>{createErr}</div>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+            <Btn variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Btn>
+            <Btn onClick={createWebhook} disabled={creating}>{creating ? "Creating…" : "Create Webhook"}</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 /* ═══ Treasury Tab ═══ */
 function TreasuryTab() {
   const { data: treasury, loading, error } = useApi<Treasury>("/api/treasury", 30_000);
@@ -1945,7 +2137,7 @@ export default function Dashboard() {
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
     p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, analytics: <AnalyticsTab />,
-    keys: <ApiKeysTab />,
+    keys: <ApiKeysTab />, webhooks: <WebhooksTab />,
   };
 
   return (
