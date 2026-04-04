@@ -1584,84 +1584,157 @@ function X402Tab() {
   );
 }
 
+interface AnalyticsData {
+  period: { days: number; since: string };
+  stats: {
+    totalVolume: number; totalTxns: number; confirmedTxns: number;
+    failedTxns: number; rejectedTxns: number; pendingTxns: number;
+    failureRate: number; avgTxSize: number; todayVolume: number; todayTxns: number;
+  };
+  volumeByDay: { date: string; volume: number; count: number }[];
+  byCategory: { category: string; volume: number; count: number }[];
+  byType: {
+    onChain: { count: number; volume: number };
+    p2p: { count: number; volume: number };
+    x402: { count: number; volume: number };
+  };
+  topAgents: { agentId: string; volume: number; count: number; balance: number; status: string }[];
+}
+
+const CATEGORY_COLORS = [
+  "var(--gradient-brand)", "var(--cyan-400)", "var(--violet-400)",
+  "#f59e0b", "#10b981", "#f87171", "#a78bfa", "#34d399",
+];
+
 function AnalyticsTab() {
-  const { data: txPage, loading } = useApi<TxPage>("/api/transactions?limit=100");
-  const txns = txPage?.items;
-  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+  const [days, setDays] = useState(30);
+  const { data, loading } = useApi<AnalyticsData>(`/api/analytics?days=${days}`, 0);
 
-  if (loading) return <Loader />;
+  if (loading || !data) return <Loader />;
 
-  const all = txns ?? [];
-  const now = Date.now();
-  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-  const weekStart = new Date(now - 7 * 86_400_000);
+  const { stats, volumeByDay, byCategory, byType, topAgents } = data;
 
-  const todayConf = all.filter((t) => t.status === "CONFIRMED" && new Date(t.createdAt) >= dayStart);
-  const weekConf = all.filter((t) => t.status === "CONFIRMED" && new Date(t.createdAt) >= weekStart);
-  const weekAll = all.filter((t) => new Date(t.createdAt) >= weekStart);
-  const failed = weekAll.filter((t) => t.status === "FAILED" || t.status === "REJECTED").length;
-  const failRate = weekAll.length > 0 ? ((failed / weekAll.length) * 100).toFixed(1) : "0";
+  // Volume chart — show every Nth label so it doesn't overflow
+  const maxVol = Math.max(...volumeByDay.map((d) => d.volume), 0.01);
+  const labelStep = days <= 7 ? 1 : days <= 30 ? 5 : 10;
 
-  const todayVol = todayConf.reduce((s, t) => s + t.amountUsdc, 0);
-  const weekVol = weekConf.reduce((s, t) => s + t.amountUsdc, 0);
-  const avgSize = weekConf.length > 0 ? weekVol / weekConf.length : 0;
+  // Status breakdown
+  const totalForRate = stats.confirmedTxns + stats.failedTxns + stats.rejectedTxns;
+  const statusRows = [
+    { label: "Confirmed", count: stats.confirmedTxns, color: "var(--cyan-400)" },
+    { label: "Failed", count: stats.failedTxns, color: "#f87171" },
+    { label: "Rejected", count: stats.rejectedTxns, color: "#f59e0b" },
+  ];
 
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const dailyVols = Array(7).fill(0);
-  weekConf.forEach((t) => {
-    const day = new Date(t.createdAt).getDay();
-    const idx = day === 0 ? 6 : day - 1;
-    dailyVols[idx] += t.amountUsdc;
-  });
-  const maxVol = Math.max(...dailyVols, 1);
-
-  const onChain = weekConf.filter((t) => !t.isP2P && t.category !== "x402").length;
-  const p2pCount = weekConf.filter((t) => t.isP2P).length;
-  const x402Count = weekConf.filter((t) => t.category === "x402").length;
-  const totalTypes = onChain + p2pCount + x402Count || 1;
+  // Type breakdown totals
+  const totalTypeVol = byType.onChain.volume + byType.p2p.volume + byType.x402.volume || 1;
+  const typeRows = [
+    { label: "On-chain", ...byType.onChain, color: "var(--gradient-brand)" },
+    { label: "P2P", ...byType.p2p, color: "var(--cyan-400)" },
+    { label: "x402", ...byType.x402, color: "var(--violet-400)" },
+  ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <Stat label="Volume Today" value={`$${todayVol.toFixed(2)}`} sub={`${todayConf.length} txns`} />
-        <Stat label="Volume This Week" value={`$${weekVol.toFixed(2)}`} sub={`${weekConf.length} txns`} />
-        <Stat label="Failure Rate" value={`${failRate}%`} sub="Last 7 days" />
-        <Stat label="Avg Tx Size" value={`$${avgSize.toFixed(2)}`} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* Time range selector */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Analytics</h3>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>All data from live transactions</p>
+        </div>
+        <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)" }}>
+          {[7, 30, 90].map((d) => (
+            <button key={d} onClick={() => setDays(d)} style={{
+              padding: "5px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+              background: days === d ? "rgba(139,92,246,0.2)" : "transparent",
+              border: days === d ? "1px solid rgba(139,92,246,0.35)" : "1px solid transparent",
+              color: days === d ? "var(--violet-300)" : "var(--text-tertiary)",
+              cursor: "pointer", transition: "all 0.15s",
+            }}>{d}d</button>
+          ))}
+        </div>
       </div>
+
+      {/* KPI stats */}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <Stat label="Total Volume" value={`$${stats.totalVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`${stats.confirmedTxns} confirmed`} />
+        <Stat label="Today" value={`$${stats.todayVolume.toFixed(2)}`} sub={`${stats.todayTxns} txns`} />
+        <Stat label="Avg Tx Size" value={`$${stats.avgTxSize.toFixed(2)}`} sub="Confirmed only" />
+        <Stat label="Failure Rate" value={`${stats.failureRate.toFixed(1)}%`} sub={`${stats.failedTxns + stats.rejectedTxns} of ${stats.totalTxns}`} />
+      </div>
+
+      {/* Volume chart */}
+      <GlassCard style={{ padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)" }}>Volume — Last {days} Days</div>
+          <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>
+            ${stats.totalVolume.toLocaleString(undefined, { maximumFractionDigits: 2 })} total
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: days > 30 ? 2 : days > 14 ? 4 : 6, height: 140 }}>
+          {volumeByDay.map((d, i) => {
+            const pct = Math.max((d.volume / maxVol) * 100, d.volume > 0 ? 3 : 1);
+            const showLabel = i % labelStep === 0 || i === volumeByDay.length - 1;
+            const label = new Date(d.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+            return (
+              <div key={d.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, position: "relative" }}>
+                <div
+                  title={`${label}: $${d.volume.toFixed(2)} (${d.count} txns)`}
+                  style={{
+                    width: "100%", borderRadius: "3px 3px 0 0",
+                    height: `${pct}%`,
+                    background: d.volume > 0 ? "var(--gradient-brand)" : "rgba(255,255,255,0.04)",
+                    transition: "height 0.5s cubic-bezier(0.16,1,0.3,1)",
+                    cursor: "default",
+                  }}
+                />
+                {showLabel && (
+                  <span style={{ fontSize: 9, color: "var(--text-tertiary)", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
+                    {new Date(d.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </GlassCard>
+
+      {/* Middle row — status breakdown + type breakdown */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <GlassCard style={{ padding: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 16 }}>Weekly Volume</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 160 }}>
-            {dailyVols.map((v, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                <div style={{
-                  width: "100%", borderRadius: "4px 4px 0 0",
-                  height: `${Math.max((v / maxVol) * 100, 2)}%`,
-                  background: "var(--gradient-brand)", opacity: 0.5 + i * 0.07,
-                  transition: "height 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-                }} />
-                <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{days[i]}</span>
-              </div>
-            ))}
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 18 }}>Success vs Failure</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {statusRows.map(({ label, count, color }) => {
+              const pct = totalForRate > 0 ? Math.round((count / totalForRate) * 100) : 0;
+              return (
+                <div key={label}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>{label}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>{pct}% · {count}</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.05)" }}>
+                    <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </GlassCard>
+
         <GlassCard style={{ padding: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 16 }}>Transaction Breakdown</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
-            {[
-              { label: "On-chain", count: onChain, color: "var(--gradient-brand)" },
-              { label: "P2P", count: p2pCount, color: "var(--cyan-500)" },
-              { label: "x402", count: x402Count, color: "var(--violet-400)" },
-            ].map((t) => {
-              const pct = Math.round((t.count / totalTypes) * 100);
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 18 }}>Payment Type</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {typeRows.map(({ label, volume, count, color }) => {
+              const pct = Math.round((volume / totalTypeVol) * 100);
               return (
-                <div key={t.label}>
+                <div key={label}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 500 }}>{t.label}</span>
-                    <span style={{ color: "var(--text-tertiary)" }}>{pct}% ({t.count})</span>
+                    <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>{label}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>${volume.toFixed(2)} · {count}</span>
                   </div>
-                  <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.04)" }}>
-                    <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: t.color, transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)" }} />
+                  <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.05)" }}>
+                    <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
                   </div>
                 </div>
               );
@@ -1669,21 +1742,50 @@ function AnalyticsTab() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Category breakdown */}
+      {byCategory.length > 0 && (
+        <GlassCard style={{ padding: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 18 }}>Spending by Category</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {byCategory.map(({ category, volume, count }, i) => {
+              const maxCatVol = byCategory[0].volume || 1;
+              const pct = Math.round((volume / maxCatVol) * 100);
+              const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+              return (
+                <div key={category}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-secondary)", textTransform: "capitalize" }}>{category}</span>
+                    <span style={{ color: "var(--text-tertiary)" }}>${volume.toFixed(2)} · {count} txns</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.05)" }}>
+                    <div style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: color, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Top agents */}
       <GlassCard style={{ padding: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 16 }}>Top Agents by Volume</div>
-        <DataTable
-          headers={["Agent", "Balance", "Transactions", "Volume"]}
-          rows={(wallets ?? []).filter((w) => w.status === "ACTIVE").map((w) => {
-            const agentTxns = weekConf.filter((t) => t.fromAgentId === w.agentId);
-            const vol = agentTxns.reduce((s, t) => s + t.amountUsdc, 0);
-            return [
-              <span key="a" style={{ fontWeight: 600 }}>{w.agentId}</span>,
-              <span key="b" style={{ fontFamily: "var(--font-mono)" }}>${w.balanceUsdc.toFixed(2)}</span>,
-              `${agentTxns.length}`,
-              <span key="v" style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>${vol.toFixed(2)}</span>,
-            ];
-          })}
-        />
+        {topAgents.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--text-tertiary)", padding: "16px 0" }}>No transactions in this period</div>
+        ) : (
+          <DataTable
+            headers={["Agent", "Volume", "Txns", "Avg Size", "Balance", "Status"]}
+            rows={topAgents.map((a) => [
+              <span key="id" style={{ fontWeight: 600 }}>{a.agentId}</span>,
+              <MonoText key="vol">${a.volume.toFixed(2)}</MonoText>,
+              <span key="cnt">{a.count}</span>,
+              <MonoText key="avg">${a.count > 0 ? (a.volume / a.count).toFixed(2) : "0.00"}</MonoText>,
+              <MonoText key="bal">${a.balance.toFixed(2)}</MonoText>,
+              <Badge key="st" variant={statusVariant[a.status] || "default"}>{a.status}</Badge>,
+            ])}
+          />
+        )}
       </GlassCard>
     </div>
   );
