@@ -2047,7 +2047,7 @@ if (expected !== req.headers["x-nexuspay-signature"]) {
               Get notified when payments happen
             </div>
             <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 24px" }}>
-              Connect any URL — your own server, Slack, Zapier, or Make — and NexusPay will send you a real-time notification every time a transaction is confirmed, fails, or gets blocked by a spending policy.
+              Connect any URL and NexusPay will instantly notify it when a transaction is confirmed, fails, or gets blocked. Works with your own server, Slack, Zapier, or any automation tool.
             </p>
             {addBtn}
           </GlassCard>
