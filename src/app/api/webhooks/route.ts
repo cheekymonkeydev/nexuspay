@@ -42,6 +42,6 @@ export async function POST(req: NextRequest) {
     });
 
     // Return secret only on creation
-    return ok({ ...webhook }, 201);
+    return ok({ ...webhook });
   } catch (e) { return handleError(e); }
 }
