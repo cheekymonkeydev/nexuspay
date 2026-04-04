@@ -228,7 +228,7 @@ async function handleTool(name: string, args: Record<string, unknown>) {
     }
 
     case "nexuspay_pay_x402": {
-      const result = await api("/x402/pay", "POST", {
+      const result = await api("/x402", "POST", {
         path:    args.path,
         agentId: args.agentId,
       }) as { access: boolean; charged: number; endpoint: string };
