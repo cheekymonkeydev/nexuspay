@@ -567,7 +567,7 @@ export default function LandingPage() {
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>NexusPay</span>
         </Link>
         <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
-          {["Features", "How It Works", "Use Cases", "SDK", "AgentKit"].map((item) => (
+          {["Features", "How It Works", "Use Cases", "SDK", "AgentKit", "MCP"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -1171,6 +1171,163 @@ const agentKit = await AgentKit.from({
               View AgentKit docs →
             </a>
           </div>
+        </div>
+      </Section>
+
+      {/* ═══ MCP ═══ */}
+      <Section id="mcp" style={{ paddingBottom: "var(--section-gap)" }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 56 }}>
+          <Badge variant="violet">Model Context Protocol</Badge>
+          <h2 style={{
+            fontFamily: "var(--font-display)", fontSize: "clamp(28px, 3.5vw, 42px)",
+            fontWeight: 800, letterSpacing: "-0.03em", marginTop: 16,
+          }}>
+            NexusPay inside <GradientText>Claude & Cursor</GradientText>
+          </h2>
+          <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 16, maxWidth: 560, margin: "12px auto 0" }}>
+            MCP lets AI assistants use external tools natively. Add NexusPay once and Claude, Cursor, or Windsurf can manage wallets, send payments, and check balances — just by asking.
+          </p>
+        </div>
+
+        <div style={{ maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
+
+          {/* What is MCP explanation */}
+          <div data-reveal style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+            {[
+              {
+                icon: "⬡",
+                title: "What is MCP?",
+                desc: "Model Context Protocol is an open standard that lets AI assistants connect to external services as native tools — no custom code, no API wrappers. Your AI just gains new abilities.",
+              },
+              {
+                icon: "◈",
+                title: "Why payments?",
+                desc: "Agents that can reason but not pay hit a wall the moment they need to buy compute, access an API, or compensate another agent. MCP + NexusPay closes that gap in minutes.",
+              },
+              {
+                icon: "⚡",
+                title: "30-second setup",
+                desc: "Add one JSON block to your MCP config file. No SDK, no code, no build step. Restart your client and your AI assistant is ready to transact.",
+              },
+            ].map(({ icon, title, desc }) => (
+              <div key={title} data-reveal style={{
+                padding: "22px 20px",
+                borderRadius: "var(--radius-md)",
+                background: "rgba(139,92,246,0.04)",
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ fontSize: 22, marginBottom: 12 }}>{icon}</div>
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{title}</div>
+                <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.65 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Install block */}
+          <div data-reveal data-reveal-delay="100" style={{
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            background: "rgba(9,9,15,0.9)",
+            overflow: "hidden",
+            backdropFilter: "blur(20px)",
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 20px",
+              borderBottom: "1px solid var(--border-subtle)",
+              background: "rgba(15,15,24,0.6)",
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
+                Claude Desktop · Cursor · Windsurf
+              </span>
+              <a
+                href="https://www.npmjs.com/package/nexuspay-mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "4px 12px", borderRadius: 99,
+                  background: "rgba(139,92,246,0.08)",
+                  border: "1px solid rgba(139,92,246,0.2)",
+                  fontSize: 11, fontWeight: 600, color: "var(--violet-300)",
+                  fontFamily: "var(--font-mono)", textDecoration: "none",
+                  transition: "background 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.08)")}
+              >
+                npm
+              </a>
+            </div>
+            <pre style={{
+              padding: "24px",
+              fontFamily: "var(--font-mono)", fontSize: 13, lineHeight: 1.75,
+              color: "var(--violet-200)", margin: 0, overflowX: "auto",
+            }}>{`{
+  "mcpServers": {
+    "nexuspay": {
+      "command": "npx",
+      "args": ["-y", "nexuspay-mcp"],
+      "env": {
+        "NEXUSPAY_URL": "https://your-nexuspay.vercel.app",
+        "NEXUSPAY_API_KEY": "nxp_your_key_here"
+      }
+    }
+  }
+}`}</pre>
+          </div>
+
+          {/* Example prompts */}
+          <div data-reveal data-reveal-delay="140">
+            <div style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase",
+              color: "var(--text-tertiary)", marginBottom: 14, textAlign: "center",
+            }}>
+              What you can say after connecting
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[
+                "Check the balance of agent-researcher before running the job",
+                "Transfer $5 to agent-writer for the article it just completed",
+                "Send $2.50 USDC to 0x742d... for the compute invoice",
+                "Set a $10 daily spending limit on agent-beta",
+                "Show me the last 10 transactions from agent-alpha",
+                "Pay the inference API at /api/premium/gpt4 using agent-alpha",
+              ].map((prompt) => (
+                <div key={prompt} style={{
+                  padding: "12px 16px",
+                  borderRadius: "var(--radius-md)",
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid var(--border)",
+                  fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5,
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                }}>
+                  <span style={{ color: "var(--violet-400)", flexShrink: 0, marginTop: 1 }}>›</span>
+                  <span style={{ fontStyle: "italic" }}>&ldquo;{prompt}&rdquo;</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Client logos row */}
+          <div data-reveal data-reveal-delay="180" style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 16, letterSpacing: "0.04em" }}>
+              Works with any MCP-compatible client
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
+              {["Claude Desktop", "Cursor", "Windsurf", "Zed", "Continue.dev"].map((client) => (
+                <div key={client} style={{
+                  padding: "7px 18px", borderRadius: 99,
+                  background: "rgba(139,92,246,0.05)",
+                  border: "1px solid var(--border)",
+                  fontSize: 12, fontWeight: 600, color: "var(--text-secondary)",
+                }}>
+                  {client}
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </Section>
 

@@ -1,0 +1,39 @@
+{
+  "name": "nexuspay-mcp",
+  "version": "0.1.1",
+  "description": "MCP server for NexusPay — give Claude, Cursor, and Windsurf native USDC payment tools",
+  "license": "MIT",
+  "bin": {
+    "nexuspay-mcp": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --no-dts --clean && node -e \"const fs=require('fs'); const f='dist/index.js'; fs.writeFileSync(f, '#!/usr/bin/env node\\n' + fs.readFileSync(f,'utf8'))\"",
+    "dev": "node --loader ts-node/esm src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "nexuspay",
+    "usdc",
+    "payments",
+    "ai-agents",
+    "base",
+    "web3"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cheekymonkeydev/nexuspay"
+  }
+}
