@@ -1500,12 +1500,12 @@ function PolicyForm({ initial, wallets, onSave, onClose, saving, err: formErr }:
       <Field label="Monthly limit ($)"><Input value={pMonthly} onChange={setPMonthly} type="number" placeholder="5000" /></Field>
       <Field label="">
         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13 }}>
-          <input type="checkbox" checked={pApproval} onChange={(e) => setPApproval(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--accent-primary)" }} />
+          <input type="checkbox" checked={pApproval} onChange={(e) => setPApproval(e.target.checked)} style={{ width: 16, height: 16, accentColor: "linear-gradient(135deg, #7c3aed, #6d28d9)" }} />
           <span>Require approval for all transactions</span>
         </label>
       </Field>
       {formErr && <div style={{ color: "#f87171", fontSize: 13 }}>{formErr}</div>}
-      <button onClick={() => onSave({ agentId: pAgent, tier: pTier, maxPerTransaction: parseFloat(pMaxTx), dailyLimit: parseFloat(pDaily), monthlyLimit: parseFloat(pMonthly), requireApproval: pApproval, allowedRecipients: [], blockedMerchants: [], allowedCategories: [] })} disabled={saving} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, marginTop: 4 }}>
+      <button onClick={() => onSave({ agentId: pAgent, tier: pTier, maxPerTransaction: parseFloat(pMaxTx), dailyLimit: parseFloat(pDaily), monthlyLimit: parseFloat(pMonthly), requireApproval: pApproval, allowedRecipients: [], blockedMerchants: [], allowedCategories: [] })} disabled={saving} style={{ width: "100%", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, marginTop: 4 }}>
         {saving ? "Saving…" : initial ? "Save Changes" : "Create Policy"}
       </button>
     </Modal>
@@ -1549,7 +1549,7 @@ function PoliciesTab() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Spending Policies</h3>
-        <button onClick={() => setShowCreate(true)} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Create Policy</button>
+        <button onClick={() => setShowCreate(true)} style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Create Policy</button>
       </div>
       {(policies ?? []).length === 0 && <EmptyState icon="⊞" title="No policies yet" sub="Create a spending policy to control how agents spend USDC" />}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
@@ -1626,7 +1626,7 @@ function X402Tab() {
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Paywall Endpoints</h3>
-        <button onClick={() => setShowRegister(true)} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+        <button onClick={() => setShowRegister(true)} style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
           + Register Endpoint
         </button>
       </div>
@@ -1659,7 +1659,7 @@ function X402Tab() {
             <Input value={eDesc} onChange={setEDesc} placeholder="What does this endpoint do?" />
           </Field>
           {registerErr && <div style={{ color: "#f87171", fontSize: 13 }}>{registerErr}</div>}
-          <button onClick={registerEndpoint} disabled={registering} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: registering ? "not-allowed" : "pointer", opacity: registering ? 0.7 : 1, marginTop: 4 }}>
+          <button onClick={registerEndpoint} disabled={registering} style={{ width: "100%", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: registering ? "not-allowed" : "pointer", opacity: registering ? 0.7 : 1, marginTop: 4 }}>
             {registering ? "Registering…" : "Register Endpoint"}
           </button>
         </Modal>
@@ -1947,7 +1947,7 @@ function ApiKeysTab() {
           <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>API Keys</h3>
           <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Create a key to connect AI agents or external services to NexusPay. Pass it in every request as <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>X-Api-Key: nxp_…</span></p>
         </div>
-        <button onClick={() => { setShowCreate(true); setNewKey(null); }} style={{ background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+        <button onClick={() => { setShowCreate(true); setNewKey(null); }} style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
           + Create Key
         </button>
       </div>
@@ -1979,7 +1979,19 @@ function ApiKeysTab() {
       />
 
       {(keys ?? []).length === 0 && !newKey && (
-        <EmptyState icon="⌗" title="No API keys yet" sub='Click "+ Create Key" to generate your first key and connect an agent or service' />
+        <GlassCard style={{ padding: 48, textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>⌗</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8 }}>No API keys yet</div>
+          <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: 380, margin: "0 auto 24px" }}>
+            Create a key to connect AI agents or external services. Pass it in every request as <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>X-Api-Key: nxp_…</span>
+          </p>
+          <button
+            onClick={() => { setShowCreate(true); setNewKey(null); }}
+            style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 0 20px rgba(139,92,246,0.35)" }}
+          >
+            + Create API Key
+          </button>
+        </GlassCard>
       )}
 
       <GlassCard style={{ padding: 20 }}>
@@ -2038,7 +2050,7 @@ function ApiKeysTab() {
             </div>
           </Field>
           {createErr && <div style={{ color: "#f87171", fontSize: 13 }}>{createErr}</div>}
-          <button onClick={createKey} disabled={creating} style={{ width: "100%", background: "var(--accent-primary)", color: "#000", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.7 : 1, marginTop: 4 }}>
+          <button onClick={createKey} disabled={creating} style={{ width: "100%", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.7 : 1, marginTop: 4 }}>
             {creating ? "Creating…" : "Create Key"}
           </button>
         </Modal>
