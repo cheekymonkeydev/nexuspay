@@ -20,6 +20,12 @@ import type {
   ApiKey,
   CreateApiKeyOptions,
   CreateApiKeyResult,
+  MppEndpoint,
+  RegisterMppEndpointOptions,
+  MppPayOptions,
+  MppPayResult,
+  MppFulfillOptions,
+  MppFulfillResult,
 } from "./types";
 import { NexusPayError } from "./types";
 
@@ -102,6 +108,10 @@ export class NexusPay {
         status: opts.status ?? "",
         category: opts.category ?? "",
       }),
+
+    /** Get a single transaction by ID */
+    get: (id: string): Promise<Transaction> =>
+      this.request("GET", `/api/transactions/${id}`),
   };
 
   // ─── P2P ──────────────────────────────────────────────────────────────────
@@ -165,6 +175,55 @@ export class NexusPay {
     /** List all API keys (hashed — raw key shown only on creation) */
     list: (): Promise<ApiKey[]> =>
       this.request("GET", "/api/keys"),
+  };
+
+  // ─── MPP (Machine Payments Protocol) ──────────────────────────────────────
+
+  readonly mpp = {
+    /**
+     * Register a new MPP paywall endpoint on NexusPay.
+     * Once registered, it's accessible at /api/mpp/gateway{path}.
+     */
+    register: (opts: RegisterMppEndpointOptions): Promise<MppEndpoint> =>
+      this.request("POST", "/api/mpp", opts),
+
+    /** List all registered MPP endpoints */
+    list: (): Promise<MppEndpoint[]> =>
+      this.request("GET", "/api/mpp"),
+
+    /** Toggle an endpoint active or inactive */
+    toggle: (id: string, isActive: boolean): Promise<MppEndpoint> =>
+      this.request("PATCH", `/api/mpp/${id}`, { isActive }),
+
+    /** Delete an endpoint */
+    delete: (id: string): Promise<void> =>
+      this.request("DELETE", `/api/mpp/${id}`),
+
+    /**
+     * Pay any MPP-protected URL via the NexusPay proxy.
+     * Works for both NexusPay-hosted endpoints AND external apps using
+     * nexuspay-mpp-adapter. Handles the full 402 → pay → retry cycle.
+     *
+     * @example
+     * const result = await client.mpp.pay({
+     *   agentId: "my-agent",
+     *   url: "https://api.example.com/premium-data",
+     *   maxAmount: 1.00,
+     * });
+     */
+    pay: (opts: MppPayOptions): Promise<MppPayResult> =>
+      this.request("POST", "/api/mpp/pay", opts),
+
+    /**
+     * Fulfill a NexusPay-hosted MPP challenge directly (low-level).
+     * Use mpp.pay() instead unless you're implementing a custom MPP client
+     * and are handling the HTTP cycle yourself.
+     *
+     * ⚠ Only works for challenges issued by THIS NexusPay instance.
+     * For external apps using nexuspay-mpp-adapter, use mpp.pay() instead.
+     */
+    fulfill: (opts: MppFulfillOptions): Promise<MppFulfillResult> =>
+      this.request("POST", "/api/mpp/fulfill", opts),
   };
 }
 

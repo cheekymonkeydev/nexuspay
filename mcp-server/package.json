@@ -1,6 +1,6 @@
 {
   "name": "nexuspay-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for NexusPay — give Claude, Cursor, and Windsurf native USDC payment tools",
   "license": "MIT",
   "bin": {

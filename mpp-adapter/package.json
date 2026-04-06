@@ -1,0 +1,59 @@
+{
+  "name": "nexuspay-mpp-adapter",
+  "version": "1.0.0",
+  "description": "One-liner MPP paywall wrapper for Next.js — powered by NexusPay USDC",
+  "license": "MIT",
+  "keywords": [
+    "nexuspay",
+    "mpp",
+    "machine-payments-protocol",
+    "payments",
+    "ai-agents",
+    "usdc",
+    "402",
+    "nextjs",
+    "base",
+    "web3"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cheekymonkeydev/nexuspay"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:esm": "tsc -p tsconfig.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build": "npm run build:esm && npm run build:cjs",
+    "prepublishOnly": "npm run build",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "next": ">=14.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": false
+    }
+  }
+}
