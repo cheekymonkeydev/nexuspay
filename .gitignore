@@ -1,10 +1,39 @@
+# Dependencies
 node_modules/
+
+# Next.js
 .next/
 out/
+
+# Environment variables — NEVER commit these
 .env
 .env.local
 .env.*.local
+.env*.local
+
+# Build artifacts
 *.tsbuildinfo
 next-env.d.ts
+
+# Sub-package build output
+agentkit-plugin/dist/
+mcp-server/dist/
+sdk/dist/
+
+# Vercel
 .vercel
-.env*.local
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
