@@ -7,6 +7,7 @@ interface PolicyCheckOpts {
 
 interface PolicyResult {
   passed: boolean;
+  requiresApproval?: boolean; // funds held as PENDING — not a hard rejection
   checks: Record<string, boolean>;
   failureReason?: string;
 }
@@ -89,10 +90,15 @@ export async function enforcePolicies(
       checks.monthlyLimit = true;
     }
 
-    // Approval gate
+    // Approval gate — not a hard rejection, funds held pending human review
     if (p.requireApproval) {
       checks.approval = false;
-      return { passed: false, checks, failureReason: "Transaction requires manual approval" };
+      return {
+        passed: false,
+        requiresApproval: true,
+        checks,
+        failureReason: "Transaction requires manual approval",
+      };
     }
     checks.approval = true;
   }
