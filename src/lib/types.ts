@@ -3,7 +3,6 @@ import { z } from "zod";
 // --- Wallet ---
 export const CreateWalletInput = z.object({
   agentId: z.string().min(1),
-  initialFunding: z.number().min(0).default(10),
   metadata: z.record(z.unknown()).optional(),
 });
 export type CreateWalletInput = z.infer<typeof CreateWalletInput>;

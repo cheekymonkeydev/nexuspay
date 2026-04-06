@@ -3,6 +3,12 @@ import { prisma } from "@/lib/db";
 import { ok, err, handleError } from "@/lib/utils";
 import { authenticate, hasScope } from "@/lib/auth";
 
+function ownsWallet(auth: { id: string }, wallet: { ownerId: string | null }) {
+  // Open mode or wallet has no owner (legacy) → allow all
+  if (auth.id === "open" || !wallet.ownerId) return true;
+  return wallet.ownerId === auth.id;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
@@ -14,6 +20,7 @@ export async function GET(
     const { agentId } = await params;
     const wallet = await prisma.agentWallet.findUnique({ where: { agentId } });
     if (!wallet) return err("Wallet not found", 404);
+    if (!ownsWallet(auth, wallet)) return err("Forbidden", 403);
     return ok(wallet);
   } catch (e) { return handleError(e); }
 }
@@ -31,6 +38,7 @@ export async function PATCH(
 
     const wallet = await prisma.agentWallet.findUnique({ where: { agentId } });
     if (!wallet) return err("Wallet not found", 404);
+    if (!ownsWallet(auth, wallet)) return err("Forbidden", 403);
     if (wallet.status === "REVOKED") return err("Revoked wallets cannot be modified", 403);
 
     const updateData: Record<string, unknown> = {};

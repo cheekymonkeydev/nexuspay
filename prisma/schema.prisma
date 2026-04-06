@@ -30,6 +30,7 @@ enum AgentStatus {
 model AgentWallet {
   id            String        @id @default(cuid())
   agentId       String        @unique
+  ownerId       String?
   address       String
   cdpWalletId   String?
   balanceUsdc   Float         @default(0)
