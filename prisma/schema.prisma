@@ -157,6 +157,37 @@ model Webhook {
   @@map("webhooks")
 }
 
+model MppEndpoint {
+  id          String   @id @default(cuid())
+  path        String   @unique
+  priceUsdc   Float
+  description String?
+  intent      String   @default("charge")
+  isActive    Boolean  @default(true)
+  totalPaid   Float    @default(0)
+  hitCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  payments MppPayment[]
+
+  @@map("mpp_endpoints")
+}
+
+model MppPayment {
+  id            String   @id @default(cuid())
+  endpointId    String
+  agentId       String
+  amountUsdc    Float
+  challengeId   String
+  transactionId String?
+  receipt       String?
+  createdAt     DateTime @default(now())
+
+  endpoint MppEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@map("mpp_payments")
+}
+
 model WebhookDelivery {
   id          String   @id @default(cuid())
   webhookId   String

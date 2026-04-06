@@ -156,6 +156,26 @@ const TOOLS: Tool[] = [
       required: ["agentId", "maxPerTransaction", "dailyLimit"],
     },
   },
+  {
+    name: "nexuspay_mpp_pay",
+    description: "Pay any MPP (Machine Payments Protocol)-protected URL using an agent's USDC balance. Handles the full 402 → challenge → pay → retry cycle automatically. Use this when an API returns HTTP 402 with a WWW-Authenticate: Payment header.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId:   { type: "string", description: "Agent wallet that will pay for the request" },
+        url:       { type: "string", description: "Full URL of the MPP-protected resource to access" },
+        method:    { type: "string", description: "HTTP method (default: GET)", enum: ["GET", "POST", "PUT", "DELETE"] },
+        body:      { type: "string", description: "Request body as a JSON string (for POST/PUT requests)" },
+        maxAmount: { type: "number", description: "Safety cap — refuse to pay more than this amount in USDC" },
+      },
+      required: ["agentId", "url"],
+    },
+  },
+  {
+    name: "nexuspay_list_mpp_endpoints",
+    description: "List all registered MPP-protected endpoints on this NexusPay instance. Shows path, price, and payment stats.",
+    inputSchema: { type: "object", properties: {} },
+  },
 ];
 
 /* ─── Tool handlers ──────────────────────────────────── */
@@ -278,6 +298,37 @@ async function handleTool(name: string, args: Record<string, unknown>) {
         },
         message: `Spending policy created for ${policy.agentId}.`,
       });
+    }
+
+    case "nexuspay_mpp_pay": {
+      const result = await api("/mpp/pay", "POST", {
+        agentId:   args.agentId,
+        url:       args.url,
+        method:    args.method ?? "GET",
+        body:      args.body,
+        maxAmount: args.maxAmount,
+      }) as {
+        status: number; body: string; receipt?: string;
+        transactionId?: string; amountPaid: number;
+        remainingBalance?: number; mppHandled: boolean;
+      };
+      return text({
+        success:          result.status >= 200 && result.status < 300,
+        mppHandled:       result.mppHandled,
+        amountPaid:       result.amountPaid,
+        remainingBalance: result.remainingBalance,
+        transactionId:    result.transactionId,
+        responseStatus:   result.status,
+        body:             (() => { try { return JSON.parse(result.body); } catch { return result.body; } })(),
+        message: result.mppHandled
+          ? `MPP payment of $${result.amountPaid} USDC made. Access granted.`
+          : `Resource accessed without payment (status ${result.status}).`,
+      });
+    }
+
+    case "nexuspay_list_mpp_endpoints": {
+      const endpoints = await api("/mpp");
+      return text(endpoints);
     }
 
     default:
