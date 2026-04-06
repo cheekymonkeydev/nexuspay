@@ -168,6 +168,64 @@ export interface CreateApiKeyResult {
   scopes: string[];
 }
 
+// ─── MPP (Machine Payments Protocol) ─────────────────────────────────────────
+
+export interface MppEndpoint {
+  id: string;
+  path: string;
+  priceUsdc: number;
+  description: string | null;
+  intent: "charge" | "session";
+  isActive: boolean;
+  hitCount: number;
+  totalPaid: number;
+  createdAt: string;
+}
+
+export interface RegisterMppEndpointOptions {
+  path: string;
+  priceUsdc: number;
+  description?: string;
+  intent?: "charge" | "session";
+}
+
+/** Pay any MPP-protected URL via the NexusPay proxy (handles 402→pay→retry) */
+export interface MppPayOptions {
+  agentId: string;
+  url: string;
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  body?: string;
+  maxAmount?: number;
+}
+
+export interface MppPayResult {
+  status: number;
+  body: string;
+  receipt?: string;
+  transactionId?: string;
+  amountPaid: number;
+  remainingBalance?: number;
+  mppHandled: boolean;
+}
+
+/** Fulfill a NexusPay-hosted MPP challenge directly (without proxy) */
+export interface MppFulfillOptions {
+  agentId: string;
+  challengeId: string;
+  request: string;
+  realm: string;
+  method: string;
+  intent?: "charge" | "session";
+}
+
+export interface MppFulfillResult {
+  credential: string;
+  receipt: string;
+  transactionId: string;
+  amountPaid: number;
+  remainingBalance: number;
+}
+
 // ─── SDK Config ──────────────────────────────────────────────────────────────
 
 export interface NexusPayConfig {

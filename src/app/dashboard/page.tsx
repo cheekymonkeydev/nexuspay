@@ -2556,19 +2556,54 @@ function MppTab() {
         </div>
       </GlassCard>
 
-      {/* Gateway URL */}
-      <GlassCard style={{ padding: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Gateway URL</div>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
-          All registered endpoints are accessible via the MPP gateway:
-        </div>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, padding: "10px 14px", borderRadius: 7, background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)", color: "var(--cyan-400)" }}>
-          {typeof window !== "undefined" ? window.location.origin : "https://nexuspay.finance"}/api/mpp/gateway<span style={{ color: "var(--violet-300)" }}>/your-path</span>
-        </div>
-        <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.7 }}>
-          Requests without <code style={{ fontFamily: "var(--font-mono)", color: "var(--violet-200)", fontSize: 11 }}>Authorization: Payment</code> receive a <code style={{ fontFamily: "var(--font-mono)", color: "var(--violet-200)", fontSize: 11 }}>402</code> challenge. Agents fulfill it via <code style={{ fontFamily: "var(--font-mono)", color: "var(--violet-200)", fontSize: 11 }}>POST /api/mpp/fulfill</code> then retry with the returned credential.
-        </div>
-      </GlassCard>
+      {/* Two-flow explainer */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        {/* Flow A: NexusPay-hosted */}
+        <GlassCard style={{ padding: 18, background: "rgba(139,92,246,0.04)", border: "1px solid rgba(139,92,246,0.15)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--violet-300)", marginBottom: 10 }}>⬡ Hosted Endpoints</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.6 }}>
+            Register a path here — it's immediately accessible at the gateway URL. NexusPay issues and verifies all challenges.
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, padding: "8px 12px", borderRadius: 6, background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.15)", color: "var(--violet-300)", wordBreak: "break-all" }}>
+            {typeof window !== "undefined" ? window.location.origin : "https://nexuspay.finance"}/api/mpp/gateway<span style={{ opacity: 0.7 }}>/your-path</span>
+          </div>
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+            {[
+              "Agent hits gateway → 402 + challenge",
+              "Agent pays via nexuspay_mpp_pay tool",
+              "Gateway verifies → 200 + receipt",
+            ].map((step, i) => (
+              <div key={i} style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", gap: 8 }}>
+                <span style={{ color: "var(--violet-400)", fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0 }}>{i + 1}.</span>
+                {step}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Flow B: External adapter */}
+        <GlassCard style={{ padding: 18, background: "rgba(6,182,212,0.04)", border: "1px solid rgba(6,182,212,0.15)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--cyan-400)", marginBottom: 10 }}>⬡ External Apps</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.6 }}>
+            Any Next.js app can add a paywall in one line using <code style={{ fontFamily: "var(--font-mono)", color: "var(--cyan-400)", fontSize: 11 }}>nexuspay-mpp-adapter</code>. NexusPay acts as the payment proxy.
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, padding: "8px 12px", borderRadius: 6, background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)", color: "var(--cyan-400)" }}>
+            {"export const GET = withMpp(handler, { price: 0.10 })"}
+          </div>
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+            {[
+              "Agent hits external app → 402 + challenge",
+              "Agent pays via nexuspay_mpp_pay (proxy handles it)",
+              "Adapter verifies via NexusPay txn API → 200",
+            ].map((step, i) => (
+              <div key={i} style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", gap: 8 }}>
+                <span style={{ color: "var(--cyan-400)", fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0 }}>{i + 1}.</span>
+                {step}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
 
       {/* Endpoints list */}
       {(endpoints ?? []).length === 0 ? (
