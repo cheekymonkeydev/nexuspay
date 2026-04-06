@@ -347,14 +347,16 @@ function FundModal({ wallet, network, onClose, onBalanceUpdate }: {
     });
   }, [wallet.address]);
 
-  // Poll balance every 5s
+  // Poll + sync on-chain balance every 5s
+  // Calls the sync endpoint which detects real USDC deposits and credits them
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch(`/api/wallets/${wallet.agentId}`);
+        const res = await fetch(`/api/wallets/${wallet.agentId}/sync`, { method: "POST" });
         const json = await res.json();
-        const newBal: number = json.data?.balanceUsdc ?? json.balanceUsdc ?? prevBalanceRef.current;
-        if (newBal > prevBalanceRef.current) {
+        const newBal: number = json.data?.balanceUsdc ?? prevBalanceRef.current;
+        const deposited: number = json.data?.deposited ?? 0;
+        if (newBal > prevBalanceRef.current || deposited > 0) {
           setDetected(true);
           onBalanceUpdate();
         }
@@ -362,6 +364,8 @@ function FundModal({ wallet, network, onClose, onBalanceUpdate }: {
         setBalance(newBal);
       } catch { /* ignore */ }
     };
+    // Run immediately on open, then every 5s
+    poll();
     const id = setInterval(poll, 5000);
     return () => clearInterval(id);
   }, [wallet.agentId, onBalanceUpdate]);
@@ -413,8 +417,11 @@ function FundModal({ wallet, network, onClose, onBalanceUpdate }: {
         {/* Instruction */}
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            Send <strong style={{ color: "var(--text)" }}>USDC</strong> on <strong style={{ color: "var(--violet-300)" }}>Base</strong> to this address.
-            Balance updates automatically every 5 seconds.
+            Send <strong style={{ color: "var(--text)" }}>USDC</strong> on{" "}
+            <strong style={{ color: "var(--violet-300)" }}>Base {isMainnet(network) ? "Mainnet" : "Sepolia"}</strong> to this address.
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.5 }}>
+            Checking on-chain balance every 5 seconds. Deposit detected automatically.
           </div>
         </div>
 
@@ -520,14 +527,11 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
   const syncBalance = async () => {
     setSyncing(true); setSyncResult(null);
     try {
-      const res = await fetch("/api/wallets/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId: wallet.agentId }),
-      });
+      const res = await fetch(`/api/wallets/${wallet.agentId}/sync`, { method: "POST" });
       const json = await res.json();
       if (json.data?.synced) {
-        setSyncResult(`Synced: $${json.data.balanceUsdc.toFixed(2)}`);
+        const dep = json.data.deposited ?? 0;
+        setSyncResult(dep > 0 ? `+$${dep.toFixed(4)} deposited → $${json.data.balanceUsdc.toFixed(4)}` : `Up to date: $${json.data.balanceUsdc.toFixed(4)}`);
         onUpdate();
       } else {
         setSyncResult(json.data?.reason ?? "Not synced");
