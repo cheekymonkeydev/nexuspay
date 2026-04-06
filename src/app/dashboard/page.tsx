@@ -108,10 +108,10 @@ function WalletStatus() {
 
 /* ═══ Constants ═══ */
 type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "webhooks" | "mpp";
-const tabList: { key: Tab; label: string; icon: string }[] = [
+const tabList: { key: Tab; label: string; icon: string; badge?: boolean }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
-  { key: "transactions", label: "Transactions", icon: "↗" },
+  { key: "transactions", label: "Transactions", icon: "↗", badge: true },
   { key: "p2p", label: "P2P", icon: "⇄" },
   { key: "policies", label: "Policies", icon: "⊞" },
   { key: "x402", label: "x402", icon: "⚡" },
@@ -1177,6 +1177,99 @@ function WalletsTab() {
 
 interface TxPage { items: Tx[]; total: number; page: number; limit: number; pages: number; }
 
+function ApprovalQueue({ onAction }: { onAction: () => void }) {
+  const { data, loading, refetch } = useApi<{ items: Tx[]; total: number }>("/api/transactions?awaitingApproval=true&limit=50", 15_000);
+  const [actioning, setActioning] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const items = data?.items ?? [];
+  if (loading || items.length === 0) return null;
+
+  async function approve(id: string) {
+    setActioning(id);
+    try {
+      await fetch(`/api/transactions/${id}/approve`, { method: "POST" });
+      refetch(); onAction();
+    } finally { setActioning(null); }
+  }
+
+  async function reject(id: string) {
+    setActioning(id);
+    try {
+      await fetch(`/api/transactions/${id}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: rejectReason || "Rejected by administrator" }),
+      });
+      setRejectId(null); setRejectReason(""); refetch(); onAction();
+    } finally { setActioning(null); }
+  }
+
+  return (
+    <GlassCard style={{ padding: 0, overflow: "hidden", border: "1px solid rgba(234,179,8,0.25)", marginBottom: 4 }}>
+      {/* Header */}
+      <div style={{ padding: "14px 20px", background: "rgba(234,179,8,0.06)", borderBottom: "1px solid rgba(234,179,8,0.15)", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 16 }}>⏳</span>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: "#fde047" }}>Approval Queue</span>
+          <span style={{ fontSize: 12, color: "var(--text-tertiary)", marginLeft: 10 }}>{items.length} transaction{items.length !== 1 ? "s" : ""} awaiting review</span>
+        </div>
+      </div>
+      {/* Queue rows */}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {items.map((tx, i) => (
+          <div key={tx.id} style={{ padding: "14px 20px", borderBottom: i < items.length - 1 ? "1px solid rgba(234,179,8,0.08)" : "none", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700 }}>{tx.fromAgentId}</span>
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>→</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>{tx.toAddress.slice(0, 10)}…</span>
+              </div>
+              <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text-tertiary)" }}>
+                <span style={{ fontWeight: 700, color: "#fde047", fontFamily: "var(--font-mono)" }}>${tx.amountUsdc.toFixed(4)} USDC</span>
+                {tx.category && <span>{tx.category}</span>}
+                {tx.memo && <span style={{ fontStyle: "italic" }}>{tx.memo}</span>}
+                <span>{timeAgo(tx.createdAt)}</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <button
+                onClick={() => approve(tx.id)}
+                disabled={actioning === tx.id}
+                style={{ padding: "6px 16px", borderRadius: 7, fontSize: 12, fontWeight: 700, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "pointer", opacity: actioning === tx.id ? 0.5 : 1 }}
+              >
+                {actioning === tx.id ? "…" : "✓ Approve"}
+              </button>
+              <button
+                onClick={() => setRejectId(tx.id)}
+                disabled={actioning === tx.id}
+                style={{ padding: "6px 16px", borderRadius: 7, fontSize: 12, fontWeight: 700, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", cursor: "pointer", opacity: actioning === tx.id ? 0.5 : 1 }}
+              >
+                ✗ Reject
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Reject reason modal */}
+      {rejectId && (
+        <Modal title="Reject Transaction" onClose={() => { setRejectId(null); setRejectReason(""); }}>
+          <Field label="Reason (optional)">
+            <Input value={rejectReason} onChange={setRejectReason} placeholder="e.g. Unusual recipient address" />
+          </Field>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+            <Btn variant="secondary" onClick={() => setRejectId(null)}>Cancel</Btn>
+            <Btn variant="danger" onClick={() => reject(rejectId)} disabled={actioning === rejectId}>
+              {actioning === rejectId ? "Rejecting…" : "Confirm Reject"}
+            </Btn>
+          </div>
+        </Modal>
+      )}
+    </GlassCard>
+  );
+}
+
 function TransactionsTab() {
   const { data: wallets } = useApi<Wallet[]>("/api/wallets", 30_000);
   const { data: system } = useApi<{ cdpNetwork: string }>("/api/system");
@@ -1237,6 +1330,7 @@ function TransactionsTab() {
 
   return (
     <>
+      <ApprovalQueue onAction={refetch} />
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -2729,6 +2823,8 @@ function MppTab() {
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const { data: system } = useApi<{ cdp: string; database: string; cdpNetwork: string }>("/api/system");
+  const { data: pendingData } = useApi<{ total: number }>("/api/transactions?awaitingApproval=true&limit=1", 15_000);
+  const pendingApprovalCount = pendingData?.total ?? 0;
   useScrollReveal();
 
   const content: Record<Tab, React.ReactNode> = {
@@ -2773,7 +2869,15 @@ export default function Dashboard() {
             onMouseLeave={(e) => { if (tab !== t.key) e.currentTarget.style.background = "transparent"; }}
             >
               <span style={{ fontSize: 14, opacity: 0.7, width: 18, textAlign: "center" }}>{t.icon}</span>
-              {t.label}
+              <span style={{ flex: 1 }}>{t.label}</span>
+              {(t as { badge?: boolean }).badge && pendingApprovalCount > 0 && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, lineHeight: 1,
+                  padding: "2px 6px", borderRadius: 99,
+                  background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.4)",
+                  color: "#fde047",
+                }}>{pendingApprovalCount}</span>
+              )}
             </button>
           ))}
         </nav>
