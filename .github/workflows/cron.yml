@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Call sync-deposits
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" \
+          response=$(curl -s -o /dev/null -w "%{http_code}" -L \
             -X POST https://nexuspay.finance/api/system/sync-deposits \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json")
@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Call topup
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" \
+          response=$(curl -s -o /dev/null -w "%{http_code}" -L \
             -X POST https://nexuspay.finance/api/system/topup \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json")
