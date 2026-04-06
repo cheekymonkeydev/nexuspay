@@ -33,6 +33,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     const wallet = await prisma.agentWallet.findUnique({ where: { agentId } });
     if (!wallet) return err("Wallet not found", 404);
 
+    // Ownership check — only the wallet's owner can trigger a sync/deposit credit
+    if (auth.id !== "open" && wallet.ownerId && wallet.ownerId !== auth.id) {
+      return err("Forbidden", 403);
+    }
+
     // Skip simulated wallets — their random addresses don't correspond to real on-chain state
     if (!wallet.cdpWalletId) {
       return ok({

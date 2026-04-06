@@ -10,7 +10,11 @@ export async function GET(req: NextRequest) {
   if (!auth) return err("Unauthorized", 401);
   if (!hasScope(auth, "wallets:read")) return err("Missing scope: wallets:read", 403);
   try {
+    // In protected mode, only return wallets owned by the authenticated user.
+    // In open mode (id === "open"), return all wallets for single-operator setups.
+    const ownerFilter = auth.id !== "open" ? { ownerId: auth.id } : {};
     const wallets = await prisma.agentWallet.findMany({
+      where: ownerFilter,
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { sentTransactions: true, policies: true } } },
     });
@@ -31,27 +35,17 @@ export async function POST(req: NextRequest) {
 
     const { address, cdpWalletId } = await createCDPWallet();
 
-    // Debit treasury for initial funding
-    if (input.initialFunding > 0) {
-      await prisma.treasury.update({
-        where: { id: "default" },
-        data: {
-          balanceUsdc: { decrement: input.initialFunding },
-          totalDisbursed: { increment: input.initialFunding },
-        },
-      });
-    }
-
     const wallet = await prisma.agentWallet.create({
       data: {
         agentId: input.agentId,
+        ownerId: auth.id !== "open" ? auth.id : null,
         address,
         cdpWalletId,
-        balanceUsdc: input.initialFunding,
+        balanceUsdc: 0,
         metadata: (input.metadata ?? {}) as Record<string, string>,
       },
     });
 
-    return ok(wallet, { funded: input.initialFunding, cdpBacked: !!cdpWalletId });
+    return ok(wallet, { cdpBacked: !!cdpWalletId });
   } catch (e) { return handleError(e); }
 }

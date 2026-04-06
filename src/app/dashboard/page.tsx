@@ -1044,7 +1044,6 @@ function WalletsTab() {
   const [fundingWallet, setFundingWallet] = useState<Wallet | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState("");
-  const [newFunding, setNewFunding] = useState("10");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
@@ -1056,20 +1055,19 @@ function WalletsTab() {
       const res = await fetch("/api/wallets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId: newId.trim(), initialFunding: parseFloat(newFunding) || 0 }),
+        body: JSON.stringify({ agentId: newId.trim() }),
       });
       const json = await res.json();
       if (!json.success) { setCreateError(json.error || "Failed to create wallet"); return; }
       setShowCreate(false);
       setNewId("");
-      setNewFunding("10");
       refetch();
     } catch {
       setCreateError("Network error");
     } finally {
       setCreating(false);
     }
-  }, [newId, newFunding, refetch]);
+  }, [newId, refetch]);
 
   if (loading) return <Loader />;
   if (error) return <ErrorMsg message={error} />;
@@ -1145,9 +1143,9 @@ function WalletsTab() {
           <Field label="Agent ID">
             <Input value={newId} onChange={setNewId} placeholder="e.g. agent-echo" />
           </Field>
-          <Field label="Initial Funding (USDC)">
-            <Input value={newFunding} onChange={setNewFunding} placeholder="10" type="number" />
-          </Field>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 14 }}>
+            Wallet starts at $0.00. Use the Fund button on the wallet card to deposit USDC on-chain.
+          </p>
           {createError && <div style={{ fontSize: 13, color: "#f87171", marginBottom: 14 }}>{createError}</div>}
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
             <Btn variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Btn>

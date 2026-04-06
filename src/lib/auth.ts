@@ -45,8 +45,10 @@ export async function authenticate(req: NextRequest) {
   const cookie = req.cookies.get("nexus_session")?.value;
   if (cookie) {
     try {
-      await jwtVerify(cookie, jwtSecret());
-      return { id: "session", name: "dashboard", scopes: ["*"] as string[] };
+      const { payload } = await jwtVerify(cookie, jwtSecret());
+      // Extract the user's identity from the JWT (sub, address, or id)
+      const userId = (payload.sub ?? payload.address ?? payload.id) as string | undefined;
+      return { id: userId ?? "session", name: "dashboard", scopes: ["*"] as string[] };
     } catch {
       // Expired or invalid
     }

@@ -1,0 +1,42 @@
+name: NexusPay Cron Jobs
+
+on:
+  schedule:
+    # Sync on-chain deposits every 5 minutes
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  sync-deposits:
+    name: Sync On-Chain Deposits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sync-deposits
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST https://nexuspay.finance/api/system/sync-deposits \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          echo "sync-deposits → HTTP $response"
+          if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+            echo "::error::sync-deposits failed with HTTP $response"
+            exit 1
+          fi
+
+  topup:
+    name: Treasury Topup Check
+    runs-on: ubuntu-latest
+    # Only run topup every ~5th workflow trigger (≈ every 25 min)
+    # GitHub Actions minimum schedule is 5 min, so we use a simple step condition
+    steps:
+      - name: Call topup
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST https://nexuspay.finance/api/system/topup \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          echo "topup → HTTP $response"
+          if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+            echo "::error::topup failed with HTTP $response"
+            exit 1
+          fi
