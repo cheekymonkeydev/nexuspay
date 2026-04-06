@@ -371,7 +371,7 @@ function FundModal({ wallet, network, onClose, onBalanceUpdate }: {
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
 
-  const basescanUrl = network.includes("mainnet") || network === "base"
+  const basescanUrl = isMainnet(network)
     ? `https://basescan.org/address/${wallet.address}`
     : `https://sepolia.basescan.org/address/${wallet.address}`;
 
@@ -2370,11 +2370,14 @@ function TreasuryTab() {
   );
 }
 
+function isMainnet(network: string) {
+  return network === "base" || network === "base-mainnet";
+}
 function basescanTx(hash: string, network: string) {
-  return network === "base" ? `https://basescan.org/tx/${hash}` : `https://sepolia.basescan.org/tx/${hash}`;
+  return isMainnet(network) ? `https://basescan.org/tx/${hash}` : `https://sepolia.basescan.org/tx/${hash}`;
 }
 function basescanAddr(addr: string, network: string) {
-  return network === "base" ? `https://basescan.org/address/${addr}` : `https://sepolia.basescan.org/address/${addr}`;
+  return isMainnet(network) ? `https://basescan.org/address/${addr}` : `https://sepolia.basescan.org/address/${addr}`;
 }
 
 /* ═══ Transaction Detail Modal ═══ */
