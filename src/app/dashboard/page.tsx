@@ -107,7 +107,7 @@ function WalletStatus() {
 }
 
 /* ═══ Constants ═══ */
-type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "webhooks";
+type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "webhooks" | "mpp";
 const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
@@ -115,6 +115,7 @@ const tabList: { key: Tab; label: string; icon: string }[] = [
   { key: "p2p", label: "P2P", icon: "⇄" },
   { key: "policies", label: "Policies", icon: "⊞" },
   { key: "x402", label: "x402", icon: "⚡" },
+  { key: "mpp", label: "MPP", icon: "⬡" },
   { key: "analytics", label: "Analytics", icon: "◉" },
   { key: "keys", label: "API Keys", icon: "⌗" },
   { key: "webhooks", label: "Webhooks", icon: "⇡" },
@@ -2429,6 +2430,254 @@ function TxDetailModal({ tx, network, onClose }: { tx: Tx; network: string; onCl
   );
 }
 
+/* ═══ MPP Tab ═══ */
+interface MppEndpoint {
+  id: string; path: string; priceUsdc: number; description: string | null;
+  intent: string; isActive: boolean; totalPaid: number; hitCount: number; createdAt: string;
+  _count: { payments: number };
+}
+
+function MppTab() {
+  const { data: endpoints, loading, error, refetch } = useApi<MppEndpoint[]>("/api/mpp");
+  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+  const [showCreate, setShowCreate] = useState(false);
+  const [path, setPath] = useState("");
+  const [price, setPrice] = useState("");
+  const [description, setDescription] = useState("");
+  const [intent, setIntent] = useState<"charge" | "session">("charge");
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+
+  // MPP Pay tester
+  const [showTest, setShowTest] = useState(false);
+  const [testAgent, setTestAgent] = useState("");
+  const [testUrl, setTestUrl] = useState("");
+  const [testMax, setTestMax] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; amountPaid: number; status: number; body: string; transactionId?: string } | null>(null);
+
+  const selectStyle = { width: "100%", padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hover)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 14, outline: "none", boxSizing: "border-box" as const };
+
+  async function createEndpoint() {
+    if (!path.trim().startsWith("/")) { setCreateErr("Path must start with /"); return; }
+    if (!price || parseFloat(price) <= 0) { setCreateErr("Price must be greater than 0"); return; }
+    setCreating(true); setCreateErr("");
+    try {
+      const res = await fetch("/api/mpp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path.trim(), priceUsdc: parseFloat(price), description: description.trim() || undefined, intent }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      setShowCreate(false); setPath(""); setPrice(""); setDescription(""); setIntent("charge");
+      refetch();
+    } catch (e: unknown) { setCreateErr(e instanceof Error ? e.message : "Error"); }
+    finally { setCreating(false); }
+  }
+
+  async function toggleEndpoint(id: string, current: boolean) {
+    await fetch(`/api/mpp/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !current }) });
+    refetch();
+  }
+
+  async function deleteEndpoint(id: string) {
+    await fetch(`/api/mpp/${id}`, { method: "DELETE" });
+    refetch();
+  }
+
+  async function runTest() {
+    if (!testAgent || !testUrl) return;
+    setTesting(true); setTestResult(null);
+    try {
+      const res = await fetch("/api/mpp/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: testAgent, url: testUrl, maxAmount: testMax ? parseFloat(testMax) : undefined }),
+      });
+      const json = await res.json();
+      if (json.success) setTestResult(json.data);
+      else setTestResult({ success: false, amountPaid: 0, status: 0, body: json.error || "Failed" });
+    } catch { setTestResult({ success: false, amountPaid: 0, status: 0, body: "Network error" }); }
+    finally { setTesting(false); }
+  }
+
+  if (loading) return <Loader />;
+  if (error) return <ErrorMsg message={error} />;
+
+  const totalRevenue = (endpoints ?? []).reduce((s, e) => s + e.totalPaid, 0);
+  const totalHits = (endpoints ?? []).reduce((s, e) => s + e.hitCount, 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Machine Payments Protocol</h3>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4, maxWidth: 520 }}>
+            Register MPP-protected endpoints using the open standard HTTP 402 flow. Agents pay with <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>WWW-Authenticate: Payment</span> challenges and receive <span style={{ fontFamily: "var(--font-mono)", color: "var(--cyan-400)" }}>Payment-Receipt</span> headers on success.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowTest(true)} style={{ padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.2)", color: "var(--cyan-400)", cursor: "pointer" }}>
+            ⚡ Test MPP Pay
+          </button>
+          <button onClick={() => setShowCreate(true)} style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 0 16px rgba(139,92,246,0.35)" }}>
+            + Register Endpoint
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <Stat label="Registered Endpoints" value={`${(endpoints ?? []).length}`} sub={`${(endpoints ?? []).filter(e => e.isActive).length} active`} />
+        <Stat label="Total Revenue" value={`$${totalRevenue.toFixed(2)}`} sub="USDC collected" />
+        <Stat label="Total Hits" value={`${totalHits}`} sub="Paid requests" />
+        <Stat label="Avg Price" value={(endpoints ?? []).length > 0 ? `$${((endpoints ?? []).reduce((s, e) => s + e.priceUsdc, 0) / (endpoints ?? []).length).toFixed(4)}` : "$0"} sub="Per request" />
+      </div>
+
+      {/* Protocol info strip */}
+      <GlassCard style={{ padding: "14px 20px", background: "rgba(139,92,246,0.04)", border: "1px solid rgba(139,92,246,0.12)" }}>
+        <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "center" }}>
+          {[
+            { label: "Standard", value: "IETF draft-ryan-httpauth-payment" },
+            { label: "Challenge header", value: "WWW-Authenticate: Payment" },
+            { label: "Auth header", value: "Authorization: Payment" },
+            { label: "Receipt header", value: "Payment-Receipt" },
+            { label: "Payment rail", value: "NexusPay USDC" },
+            { label: "Error format", value: "RFC 9457 Problem Details" },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--violet-300)" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+
+      {/* Gateway URL */}
+      <GlassCard style={{ padding: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Gateway URL</div>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
+          All registered endpoints are accessible via the MPP gateway:
+        </div>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, padding: "10px 14px", borderRadius: 7, background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)", color: "var(--cyan-400)" }}>
+          {typeof window !== "undefined" ? window.location.origin : "https://nexuspay.finance"}/api/mpp/gateway<span style={{ color: "var(--violet-300)" }}>/your-path</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.7 }}>
+          Requests without <code style={{ fontFamily: "var(--font-mono)", color: "var(--violet-200)", fontSize: 11 }}>Authorization: Payment</code> receive a <code style={{ fontFamily: "var(--font-mono)", color: "var(--violet-200)", fontSize: 11 }}>402</code> challenge. Agents fulfill it via <code style={{ fontFamily: "var(--font-mono)", color: "var(--violet-200)", fontSize: 11 }}>POST /api/mpp/fulfill</code> then retry with the returned credential.
+        </div>
+      </GlassCard>
+
+      {/* Endpoints list */}
+      {(endpoints ?? []).length === 0 ? (
+        <GlassCard style={{ padding: 40, textAlign: "center", border: "1px solid rgba(139,92,246,0.12)" }}>
+          <div style={{ fontSize: 36, marginBottom: 14 }}>⬡</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8 }}>No MPP endpoints yet</div>
+          <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: 400, margin: "0 auto 24px" }}>
+            Register a path and price. Any agent with a NexusPay wallet can pay to access it — no API keys, no OAuth, just a signed payment credential.
+          </p>
+          <button onClick={() => setShowCreate(true)} style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            + Register First Endpoint
+          </button>
+        </GlassCard>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {(endpoints ?? []).map((ep) => (
+            <GlassCard key={ep.id} style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "16px 20px", display: "flex", alignItems: "flex-start", gap: 16 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{ep.path}</span>
+                    <Badge variant={ep.isActive ? "success" : "default"}>{ep.isActive ? "ACTIVE" : "PAUSED"}</Badge>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "var(--violet-300)" }}>{ep.intent}</span>
+                  </div>
+                  {ep.description && <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 8 }}>{ep.description}</div>}
+                  <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-tertiary)" }}>
+                    <span style={{ fontWeight: 700, color: "var(--cyan-400)", fontFamily: "var(--font-mono)" }}>${ep.priceUsdc.toFixed(4)} USDC</span>
+                    <span>{ep.hitCount} requests</span>
+                    <span>${ep.totalPaid.toFixed(4)} collected</span>
+                    <span>{ep._count.payments} payments</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <button onClick={() => toggleEndpoint(ep.id, ep.isActive)} style={{ fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 6, background: ep.isActive ? "rgba(234,179,8,0.08)" : "rgba(6,182,212,0.08)", border: `1px solid ${ep.isActive ? "rgba(234,179,8,0.2)" : "rgba(6,182,212,0.2)"}`, color: ep.isActive ? "#fde047" : "var(--cyan-400)", cursor: "pointer" }}>
+                    {ep.isActive ? "Pause" : "Enable"}
+                  </button>
+                  <button onClick={() => deleteEndpoint(ep.id)} style={{ fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", cursor: "pointer" }}>Delete</button>
+                </div>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      )}
+
+      {/* Register modal */}
+      {showCreate && (
+        <Modal title="Register MPP Endpoint" onClose={() => { setShowCreate(false); setCreateErr(""); }}>
+          <Field label="Endpoint Path">
+            <Input value={path} onChange={setPath} placeholder="/api/premium/data" />
+          </Field>
+          <Field label="Price (USDC per request)">
+            <Input value={price} onChange={setPrice} placeholder="0.001" type="number" />
+          </Field>
+          <Field label="Description (optional)">
+            <Input value={description} onChange={setDescription} placeholder="e.g. Premium market data endpoint" />
+          </Field>
+          <Field label="Intent">
+            <select value={intent} onChange={(e) => setIntent(e.target.value as "charge" | "session")} style={selectStyle}>
+              <option value="charge">charge — one-time per request</option>
+              <option value="session">session — streaming / high frequency</option>
+            </select>
+          </Field>
+          {createErr && <div style={{ color: "#f87171", fontSize: 13 }}>{createErr}</div>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+            <Btn variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Btn>
+            <Btn onClick={createEndpoint} disabled={creating}>{creating ? "Registering…" : "Register"}</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* MPP Pay tester modal */}
+      {showTest && (
+        <Modal title="Test MPP Pay" onClose={() => { setShowTest(false); setTestResult(null); }}>
+          <div style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16, lineHeight: 1.6 }}>
+            Send an agent to fetch any MPP-protected URL. NexusPay handles the full 402 → pay → retry cycle automatically.
+          </div>
+          <Field label="Agent Wallet">
+            <select value={testAgent} onChange={(e) => setTestAgent(e.target.value)} style={selectStyle}>
+              <option value="">Select agent…</option>
+              {(wallets ?? []).filter(w => w.status === "ACTIVE").map(w => (
+                <option key={w.agentId} value={w.agentId}>{w.agentId} (${w.balanceUsdc.toFixed(2)})</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Target URL">
+            <Input value={testUrl} onChange={setTestUrl} placeholder="https://example.com/api/paid-resource" />
+          </Field>
+          <Field label="Max Amount Cap (USDC, optional)">
+            <Input value={testMax} onChange={setTestMax} placeholder="e.g. 0.10" type="number" />
+          </Field>
+          {testResult && (
+            <div style={{ padding: 14, borderRadius: 8, background: testResult.success ? "rgba(6,182,212,0.06)" : "rgba(248,113,113,0.06)", border: `1px solid ${testResult.success ? "rgba(6,182,212,0.2)" : "rgba(248,113,113,0.2)"}`, marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: testResult.success ? "var(--cyan-400)" : "#f87171", marginBottom: 6 }}>
+                {testResult.success ? `✓ Success — $${testResult.amountPaid.toFixed(4)} USDC paid` : "✗ Failed"}
+              </div>
+              {testResult.transactionId && <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>tx: {testResult.transactionId}</div>}
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-secondary)", wordBreak: "break-all", maxHeight: 80, overflowY: "auto" }}>{typeof testResult.body === "string" ? testResult.body : JSON.stringify(testResult.body)}</div>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+            <Btn variant="secondary" onClick={() => setShowTest(false)}>Close</Btn>
+            <Btn onClick={runTest} disabled={testing || !testAgent || !testUrl}>{testing ? "Paying…" : "Send Request"}</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 /* ═══ MAIN DASHBOARD ═══ */
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -2437,8 +2686,8 @@ export default function Dashboard() {
 
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
-    p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, analytics: <AnalyticsTab />,
-    keys: <ApiKeysTab />, webhooks: <WebhooksTab />,
+    p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, mpp: <MppTab />,
+    analytics: <AnalyticsTab />, keys: <ApiKeysTab />, webhooks: <WebhooksTab />,
   };
 
   return (
