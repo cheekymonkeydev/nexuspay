@@ -14,7 +14,6 @@ export interface AgentWallet {
 
 export interface CreateWalletOptions {
   agentId: string;
-  initialFunding?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -224,6 +223,38 @@ export interface MppFulfillResult {
   transactionId: string;
   amountPaid: number;
   remainingBalance: number;
+}
+
+// ─── x402 Client ─────────────────────────────────────────────────────────────
+
+export interface X402FetchOptions {
+  /** Agent wallet that pays for the request */
+  agentId: string;
+  /** Target URL to fetch (may or may not be x402-protected) */
+  url: string;
+  /** HTTP method (default: GET) */
+  method?: string;
+  /** Request body */
+  body?: unknown;
+  /** Additional request headers */
+  headers?: Record<string, string>;
+  /** Maximum USDC willing to pay if a 402 is encountered (default: 1.00) */
+  maxAmountUsdc?: number;
+}
+
+export interface X402FetchResult {
+  /** HTTP status from the target server */
+  status: number;
+  /** Response body from the target server */
+  body: unknown;
+  /** USDC charged (0 if the endpoint was not paywalled) */
+  amountPaid: number;
+  /** NexusPay transaction ID (present when a payment was made) */
+  transactionId?: string;
+  /** Whether a 402 Payment Required was encountered and automatically paid */
+  paywalled: boolean;
+  /** NexusPay operator wallet address that made the on-chain payment */
+  operatorAddress: string;
 }
 
 // ─── SDK Config ──────────────────────────────────────────────────────────────
