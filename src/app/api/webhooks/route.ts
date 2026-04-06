@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, err, handleError } from "@/lib/utils";
-import { authenticate } from "@/lib/auth";
+import { authenticate, hasScope } from "@/lib/auth";
 import { generateWebhookSecret, WEBHOOK_EVENTS } from "@/lib/webhooks";
 import { z } from "zod";
 
@@ -12,7 +12,9 @@ const CreateWebhookSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "webhooks:read")) return err("Missing scope: webhooks:read", 403);
   try {
     const webhooks = await prisma.webhook.findMany({
       orderBy: { createdAt: "desc" },
@@ -31,7 +33,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "webhooks:write")) return err("Missing scope: webhooks:write", 403);
   try {
     const body = await req.json();
     const input = CreateWebhookSchema.parse(body);

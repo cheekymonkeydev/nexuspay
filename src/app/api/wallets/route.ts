@@ -3,10 +3,12 @@ import { prisma } from "@/lib/db";
 import { createCDPWallet } from "@/lib/cdp";
 import { CreateWalletInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
-import { authenticate } from "@/lib/auth";
+import { authenticate, hasScope } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "wallets:read")) return err("Missing scope: wallets:read", 403);
   try {
     const wallets = await prisma.agentWallet.findMany({
       orderBy: { createdAt: "desc" },
@@ -17,7 +19,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "wallets:write")) return err("Missing scope: wallets:write", 403);
   try {
     const body = await req.json();
     const input = CreateWalletInput.parse(body);

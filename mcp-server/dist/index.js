@@ -208,7 +208,7 @@ async function handleTool(name, args) {
       });
     }
     case "nexuspay_pay_x402": {
-      const result = await api("/x402/pay", "POST", {
+      const result = await api("/x402", "POST", {
         path: args.path,
         agentId: args.agentId
       });
