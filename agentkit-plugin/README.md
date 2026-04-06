@@ -71,7 +71,7 @@ Once connected, your agent understands natural language payment instructions:
 ## Environment Variables
 
 ```env
-NEXUSPAY_URL=https://your-nexuspay.vercel.app
+NEXUSPAY_URL=https://nexuspay.finance
 NEXUSPAY_API_KEY=npk_live_...
 
 # Coinbase CDP (for AgentKit)
@@ -114,7 +114,7 @@ NexusPay implements the [x402 protocol](https://x402.org) for HTTP pay-per-reque
 
 ## Links
 
-- [NexusPay Dashboard](https://your-nexuspay.vercel.app)
-- [NexusPay REST API Docs](https://your-nexuspay.vercel.app/docs)
+- [NexusPay Dashboard](https://nexuspay.finance)
+- [NexusPay REST API Docs](https://nexuspay.finance/docs)
 - [nexuspay-sdk on npm](https://www.npmjs.com/package/nexuspay-sdk)
 - [Coinbase AgentKit Docs](https://docs.cdp.coinbase.com/agent-kit/welcome)
