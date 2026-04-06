@@ -10,6 +10,7 @@ import { timeAgo } from "@/lib/utils";
 interface Wallet {
   id: string; agentId: string; address: string; balanceUsdc: number;
   status: string; createdAt: string;
+  autoTopUpEnabled?: boolean; topUpThreshold?: number | null; topUpAmount?: number | null;
   _count?: { sentTransactions: number; policies: number };
 }
 interface Tx {
@@ -489,6 +490,32 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [showFund, setShowFund] = useState(false);
 
+  // Auto top-up state
+  const [topUpEnabled, setTopUpEnabled] = useState(wallet.autoTopUpEnabled ?? false);
+  const [topUpThreshold, setTopUpThreshold] = useState(wallet.topUpThreshold?.toString() ?? "");
+  const [topUpAmount, setTopUpAmount] = useState(wallet.topUpAmount?.toString() ?? "");
+  const [savingTopUp, setSavingTopUp] = useState(false);
+  const [topUpResult, setTopUpResult] = useState<string | null>(null);
+
+  const saveTopUp = async () => {
+    setSavingTopUp(true); setTopUpResult(null);
+    try {
+      const res = await fetch(`/api/wallets/${wallet.agentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          autoTopUpEnabled: topUpEnabled,
+          topUpThreshold: topUpThreshold ? parseFloat(topUpThreshold) : null,
+          topUpAmount: topUpAmount ? parseFloat(topUpAmount) : null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) { setTopUpResult("Saved"); onUpdate(); }
+      else setTopUpResult(json.error || "Failed to save");
+    } catch { setTopUpResult("Network error"); }
+    finally { setSavingTopUp(false); }
+  };
+
   const syncBalance = async () => {
     setSyncing(true); setSyncResult(null);
     try {
@@ -726,6 +753,62 @@ function WalletDrawer({ wallet, txns, policies, network, onClose, onUpdate }: {
               </div>
             </div>
           )}
+
+          {/* Auto Top-Up */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10 }}>Auto Top-Up</div>
+            <div style={{ padding: 16, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Enable auto top-up</span>
+                <div
+                  onClick={() => setTopUpEnabled((v) => !v)}
+                  style={{
+                    width: 36, height: 20, borderRadius: 10, cursor: "pointer", transition: "background 0.2s",
+                    background: topUpEnabled ? "var(--violet-500)" : "rgba(255,255,255,0.1)",
+                    position: "relative",
+                  }}
+                >
+                  <div style={{
+                    position: "absolute", top: 2, left: topUpEnabled ? 18 : 2,
+                    width: 16, height: 16, borderRadius: "50%", background: "#fff",
+                    transition: "left 0.2s",
+                  }} />
+                </div>
+              </label>
+              {topUpEnabled && (
+                <>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                    When balance drops below the threshold, automatically pull the top-up amount from treasury.
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" }}>Threshold (USDC)</div>
+                      <input
+                        type="number" value={topUpThreshold} onChange={(e) => setTopUpThreshold(e.target.value)}
+                        placeholder="e.g. 10"
+                        style={{ width: "100%", padding: "8px 10px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hover)", borderRadius: 6, color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" }}>Top-Up Amount (USDC)</div>
+                      <input
+                        type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)}
+                        placeholder="e.g. 50"
+                        style={{ width: "100%", padding: "8px 10px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hover)", borderRadius: 6, color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  onClick={saveTopUp} disabled={savingTopUp}
+                  style={{ padding: "7px 16px", borderRadius: 7, fontSize: 12, fontWeight: 700, background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", color: "var(--violet-300)", cursor: "pointer", opacity: savingTopUp ? 0.6 : 1 }}
+                >{savingTopUp ? "Saving…" : "Save"}</button>
+                {topUpResult && <span style={{ fontSize: 12, color: topUpResult === "Saved" ? "var(--cyan-400)" : "#f87171" }}>{topUpResult}</span>}
+              </div>
+            </div>
+          </div>
 
           {/* Recent transactions */}
           <div>
@@ -1792,28 +1875,48 @@ function AnalyticsTab() {
 }
 
 /* ═══ API Keys Tab ═══ */
+const SCOPE_GROUPS = [
+  { label: "Wallets", scopes: ["wallets:read", "wallets:write"] },
+  { label: "Transactions", scopes: ["transactions:read", "transactions:write"] },
+  { label: "Policies", scopes: ["policies:read", "policies:write"] },
+  { label: "Webhooks", scopes: ["webhooks:read", "webhooks:write"] },
+  { label: "x402 Paywalls", scopes: ["x402:read", "x402:write"] },
+  { label: "Analytics", scopes: ["analytics:read"] },
+  { label: "API Keys", scopes: ["keys:read", "keys:write"] },
+];
+
 function ApiKeysTab() {
   const { data: keys, loading, error, refetch } = useApi<ApiKey[]>("/api/keys");
   const [showCreate, setShowCreate] = useState(false);
   const [keyName, setKeyName] = useState("");
+  const [fullAccess, setFullAccess] = useState(true);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(SCOPE_GROUPS.flatMap((g) => g.scopes));
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  function toggleScope(scope: string) {
+    setSelectedScopes((prev) => prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]);
+  }
+
   async function createKey() {
     if (!keyName.trim()) { setCreateErr("Name is required"); return; }
+    const scopes = fullAccess ? ["*"] : selectedScopes;
+    if (!fullAccess && scopes.length === 0) { setCreateErr("Select at least one scope"); return; }
     setCreating(true); setCreateErr("");
     try {
       const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: keyName.trim(), scopes: ["*"] }),
+        body: JSON.stringify({ name: keyName.trim(), scopes }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed");
       setNewKey(json.data.key);
       setKeyName("");
+      setFullAccess(true);
+      setSelectedScopes(SCOPE_GROUPS.flatMap((g) => g.scopes));
       refetch();
     } catch (e: unknown) {
       setCreateErr(e instanceof Error ? e.message : "Error");
@@ -1903,9 +2006,34 @@ function ApiKeysTab() {
           <Field label="Key name">
             <Input value={keyName} onChange={setKeyName} placeholder="e.g. production-agent" />
           </Field>
-          <Field label="Scopes">
-            <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-secondary)", fontSize: 13, color: "var(--text-tertiary)" }}>
-              Full access <span style={{ fontFamily: "var(--font-mono)", color: "var(--violet-300)" }}>["*"]</span>
+          <Field label="Permissions">
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Full access toggle */}
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 12px", borderRadius: 7, background: fullAccess ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${fullAccess ? "rgba(139,92,246,0.3)" : "var(--border)"}`, transition: "all 0.15s" }}>
+                <input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} style={{ accentColor: "var(--violet-400)", width: 14, height: 14 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: fullAccess ? "var(--violet-300)" : "var(--text)" }}>Full access <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>[*]</span></div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 1 }}>All current and future permissions</div>
+                </div>
+              </label>
+              {/* Granular scopes */}
+              {!fullAccess && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: 7, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)" }}>
+                  {SCOPE_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 5 }}>{group.label}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {group.scopes.map((scope) => (
+                          <label key={scope} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "4px 10px", borderRadius: 99, background: selectedScopes.includes(scope) ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${selectedScopes.includes(scope) ? "rgba(139,92,246,0.3)" : "var(--border)"}`, transition: "all 0.15s" }}>
+                            <input type="checkbox" checked={selectedScopes.includes(scope)} onChange={() => toggleScope(scope)} style={{ accentColor: "var(--violet-400)", width: 12, height: 12 }} />
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: selectedScopes.includes(scope) ? "var(--violet-300)" : "var(--text-tertiary)" }}>{scope}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </Field>
           {createErr && <div style={{ color: "#f87171", fontSize: 13 }}>{createErr}</div>}
@@ -1935,6 +2063,21 @@ function WebhooksTab() {
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
+
+  async function testWebhook(id: string) {
+    setTesting(id);
+    try {
+      const res = await fetch(`/api/webhooks/${id}/test`, { method: "POST" });
+      const json = await res.json();
+      setTestResult((prev) => ({ ...prev, [id]: { success: json.data?.success ?? false, message: json.data?.message ?? "Unknown result" } }));
+      setExpanded(id); // auto-expand logs so they see the result
+      refetch();
+    } catch {
+      setTestResult((prev) => ({ ...prev, [id]: { success: false, message: "Network error" } }));
+    } finally { setTesting(null); }
+  }
 
   function toggleEvent(e: string) {
     setSelectedEvents((prev) => prev.includes(e) ? prev.filter((x) => x !== e) : [...prev, e]);
@@ -2085,10 +2228,20 @@ if (expected !== req.headers["x-nexuspay-signature"]) {
                     ))}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center", flexWrap: "wrap" }}>
                   <button onClick={() => setExpanded(expanded === wh.id ? null : wh.id)} style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", color: "var(--text-tertiary)", cursor: "pointer" }}>
                     {expanded === wh.id ? "Hide" : `Logs (${wh._count.deliveries})`}
                   </button>
+                  <button
+                    onClick={() => testWebhook(wh.id)}
+                    disabled={testing === wh.id}
+                    style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)", color: "var(--violet-300)", cursor: testing === wh.id ? "not-allowed" : "pointer", opacity: testing === wh.id ? 0.6 : 1 }}
+                  >{testing === wh.id ? "Sending…" : "Send Test"}</button>
+                  {testResult[wh.id] && (
+                    <span style={{ fontSize: 11, color: testResult[wh.id].success ? "var(--cyan-400)" : "#f87171", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {testResult[wh.id].success ? "✓ Delivered" : "✗ Failed"}
+                    </span>
+                  )}
                   <button onClick={() => toggleActive(wh.id, wh.isActive)} style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: wh.isActive ? "rgba(234,179,8,0.08)" : "rgba(6,182,212,0.08)", border: `1px solid ${wh.isActive ? "rgba(234,179,8,0.2)" : "rgba(6,182,212,0.2)"}`, color: wh.isActive ? "#fde047" : "var(--cyan-400)", cursor: "pointer" }}>
                     {wh.isActive ? "Pause" : "Enable"}
                   </button>

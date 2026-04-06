@@ -3,6 +3,22 @@ import { jwtVerify } from "jose";
 import { prisma } from "./db";
 import { sha256 } from "./utils";
 
+export const SCOPES: Record<string, string> = {
+  "wallets:read":       "View wallets and balances",
+  "wallets:write":      "Create and manage wallets",
+  "transactions:read":  "View transaction history",
+  "transactions:write": "Send transactions and transfers",
+  "policies:read":      "View spending policies",
+  "policies:write":     "Create and update policies",
+  "analytics:read":     "View analytics data",
+  "webhooks:read":      "View webhooks",
+  "webhooks:write":     "Create and manage webhooks",
+  "x402:read":          "View paywall endpoints",
+  "x402:write":         "Create paywalls and process payments",
+  "keys:read":          "View API keys",
+  "keys:write":         "Create and revoke API keys",
+};
+
 const jwtSecret = () =>
   new TextEncoder().encode(process.env.JWT_SECRET ?? "");
 

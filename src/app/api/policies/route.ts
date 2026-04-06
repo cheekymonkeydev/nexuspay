@@ -2,10 +2,12 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { CreatePolicyInput } from "@/lib/types";
 import { ok, err, handleError } from "@/lib/utils";
-import { authenticate } from "@/lib/auth";
+import { authenticate, hasScope } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "policies:read")) return err("Missing scope: policies:read", 403);
   try {
     const agentId = req.nextUrl.searchParams.get("agentId");
     const tier = req.nextUrl.searchParams.get("tier");
@@ -20,7 +22,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "policies:write")) return err("Missing scope: policies:write", 403);
   try {
     const body = await req.json();
     const input = CreatePolicyInput.parse(body);

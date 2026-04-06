@@ -1,13 +1,15 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, err, handleError } from "@/lib/utils";
-import { authenticate } from "@/lib/auth";
+import { authenticate, hasScope } from "@/lib/auth";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "webhooks:write")) return err("Missing scope: webhooks:write", 403);
   try {
     const { id } = await params;
     const { isActive } = await req.json();
@@ -24,7 +26,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "webhooks:write")) return err("Missing scope: webhooks:write", 403);
   try {
     const { id } = await params;
     await prisma.webhook.delete({ where: { id } });

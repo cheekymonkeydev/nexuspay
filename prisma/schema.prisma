@@ -34,7 +34,10 @@ model AgentWallet {
   cdpWalletId   String?
   balanceUsdc   Float         @default(0)
   status        AgentStatus   @default(ACTIVE)
-  metadata      Json?
+  metadata          Json?
+  autoTopUpEnabled  Boolean   @default(false)
+  topUpThreshold    Float?
+  topUpAmount       Float?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

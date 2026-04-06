@@ -2,10 +2,12 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { CreateApiKeyInput } from "@/lib/types";
 import { ok, err, handleError, nanoid, sha256 } from "@/lib/utils";
-import { authenticate } from "@/lib/auth";
+import { authenticate, hasScope } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "keys:write")) return err("Missing scope: keys:write", 403);
   try {
     const body = await req.json();
     const input = CreateApiKeyInput.parse(body);
@@ -24,7 +26,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
+  if (!hasScope(auth, "keys:read")) return err("Missing scope: keys:read", 403);
   try {
     const keys = await prisma.apiKey.findMany({
       select: { id: true, name: true, prefix: true, scopes: true, isActive: true, lastUsedAt: true, createdAt: true },
