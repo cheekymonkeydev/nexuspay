@@ -26,7 +26,8 @@ import { getUsdcBalance } from "@/lib/chain";
 type Params = { params: Promise<{ agentId: string }> };
 
 export async function POST(req: NextRequest, { params }: Params) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
   try {
     const { agentId } = await params;
 
