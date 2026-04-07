@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
   if (!auth) return err("Unauthorized", 401);
   try {
     const address = getOperatorAddress();
-    return ok({ operatorAddress: address, network: process.env.NETWORK ?? "base-sepolia" });
+    return ok({ operatorAddress: address, network: process.env.NETWORK ?? "base-mainnet" });
   } catch {
     return ok({ operatorAddress: null, configured: false });
   }

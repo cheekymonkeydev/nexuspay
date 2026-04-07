@@ -17,7 +17,7 @@ export async function GET() {
       version: "0.2.0",
       database: dbStatus,
       cdp: cdp.mode,
-      cdpNetwork: process.env.NETWORK || "base-sepolia",
+      cdpNetwork: process.env.NETWORK || "base-mainnet",
       cdpConfigured: cdp.configured,
       environment: process.env.NODE_ENV,
     });

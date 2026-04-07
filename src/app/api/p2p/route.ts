@@ -7,7 +7,8 @@ import { authenticate } from "@/lib/auth";
 import { deliverWebhook } from "@/lib/webhooks";
 
 export async function POST(req: NextRequest) {
-  if (!await authenticate(req)) return err("Unauthorized", 401);
+  const auth = await authenticate(req);
+  if (!auth) return err("Unauthorized", 401);
   try {
     const body = await req.json();
     const input = P2PTransferInput.parse(body);
@@ -22,15 +23,25 @@ export async function POST(req: NextRequest) {
 
     if (!from) return err("Sender wallet not found", 404);
     if (!to) return err("Recipient wallet not found", 404);
+
+    // Ownership check — only the wallet's owner can send from it
+    if (auth.id !== "open" && from.ownerId && from.ownerId !== auth.id) {
+      return err("Forbidden", 403);
+    }
+
     if (from.status !== "ACTIVE") return err("Sender wallet is suspended", 403);
     if (from.balanceUsdc < input.amountUsdc) return err("Insufficient balance", 400);
 
-    // Policy enforcement (no longer bypassed)
+    // Policy enforcement
     const policyResult = await enforcePolicies(input.fromAgentId, input.amountUsdc, {
       category: "p2p",
       toAddress: to.address,
     });
+
     if (!policyResult.passed) {
+      if (policyResult.requiresApproval) {
+        return err("This transfer requires manual approval — use the approval queue", 403);
+      }
       return err(policyResult.failureReason || "Policy check failed", 403);
     }
 

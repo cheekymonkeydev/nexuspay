@@ -26,7 +26,7 @@ async function loadCDP(): Promise<boolean> {
       privateKey: process.env.CDP_API_KEY_PRIVATE_KEY.replace(/\\n/g, "\n"),
     });
     cdpReady = true;
-    console.info("[CDP] Initialized — network:", process.env.NETWORK ?? "base-sepolia");
+    console.info("[CDP] Initialized — network:", process.env.NETWORK ?? "base-mainnet");
     return true;
   } catch (e) {
     console.warn("[CDP] SDK init failed, using simulation mode:", e);
@@ -56,7 +56,7 @@ export async function getCDPStatus(): Promise<{
   return {
     mode: ready ? "live" : "simulated",
     configured,
-    network: process.env.NETWORK ?? "base-sepolia",
+    network: process.env.NETWORK ?? "base-mainnet",
   };
 }
 
@@ -76,7 +76,7 @@ export async function createCDPWallet(): Promise<{
         }>;
       };
       const wallet = await WalletCls.create({
-        networkId: process.env.NETWORK ?? "base-sepolia",
+        networkId: process.env.NETWORK ?? "base-mainnet",
       });
       const addr = await wallet.getDefaultAddress();
       return { address: addr.getId(), cdpWalletId: wallet.getId(), simulated: false };
@@ -112,7 +112,7 @@ export async function sendUSDC(
         amount: amountUsdc,
         assetId: "usdc",
         destination: toAddress,
-        networkId: process.env.NETWORK ?? "base-sepolia",
+        networkId: process.env.NETWORK ?? "base-mainnet",
       });
       return { txHash: transfer.getTransactionHash(), simulated: false };
     } catch (e) {
