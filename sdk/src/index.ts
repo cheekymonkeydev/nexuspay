@@ -26,6 +26,8 @@ import type {
   MppPayResult,
   MppFulfillOptions,
   MppFulfillResult,
+  X402FetchOptions,
+  X402FetchResult,
 } from "./types";
 import { NexusPayError } from "./types";
 
@@ -137,7 +139,34 @@ export class NexusPay {
       }),
   };
 
-  // ─── x402 Paywalls ────────────────────────────────────────────────────────
+  // ─── x402 Client (outbound) ───────────────────────────────────────────────
+
+  readonly x402Client = {
+    /**
+     * Fetch any URL on behalf of an agent, automatically paying any x402
+     * Payment Required (402) responses using the agent's USDC balance.
+     *
+     * NexusPay's operator wallet handles the on-chain EIP-3009 signing —
+     * no per-agent key management needed.
+     *
+     * @example
+     * const result = await client.x402Client.fetch({
+     *   agentId: "my-agent",
+     *   url: "https://api.example.com/premium-data",
+     *   maxAmountUsdc: 0.10,
+     * });
+     * console.log(result.body);        // the API response
+     * console.log(result.amountPaid);  // e.g. 0.001
+     */
+    fetch: (opts: X402FetchOptions): Promise<X402FetchResult> =>
+      this.request("POST", "/api/x402/client", opts),
+
+    /** Get the NexusPay operator wallet address (fund this with USDC for x402 payments) */
+    operatorAddress: (): Promise<{ operatorAddress: string; network: string }> =>
+      this.request("GET", "/api/x402/client"),
+  };
+
+  // ─── x402 Paywalls (inbound) ──────────────────────────────────────────────
 
   readonly x402 = {
     /** Register a new paywall endpoint */
