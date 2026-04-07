@@ -1160,7 +1160,7 @@ function WalletsTab() {
           wallet={selected}
           txns={txns ?? []}
           policies={policies ?? []}
-          network={system?.cdpNetwork ?? "base-sepolia"}
+          network={system?.cdpNetwork ?? "base-mainnet"}
           onClose={() => setSelected(null)}
           onUpdate={refetch}
         />
@@ -1168,7 +1168,7 @@ function WalletsTab() {
       {fundingWallet && (
         <FundModal
           wallet={fundingWallet}
-          network={system?.cdpNetwork ?? "base-sepolia"}
+          network={system?.cdpNetwork ?? "base-mainnet"}
           onClose={() => setFundingWallet(null)}
           onBalanceUpdate={refetch}
         />
@@ -1403,7 +1403,7 @@ function TransactionsTab() {
               ])}
             />
         }
-        {selectedTx && <TxDetailModal tx={selectedTx} network={system?.cdpNetwork ?? "base-sepolia"} onClose={() => setSelectedTx(null)} />}
+        {selectedTx && <TxDetailModal tx={selectedTx} network={system?.cdpNetwork ?? "base-mainnet"} onClose={() => setSelectedTx(null)} />}
       </div>
 
       {showSend && (
@@ -2451,7 +2451,7 @@ function TreasuryTab() {
           {[
             ["Treasury ID", treasury.id],
             ["Last Updated", new Date(treasury.updatedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })],
-            ["Network", process.env.NEXT_PUBLIC_NETWORK ?? "base-sepolia"],
+            ["Network", process.env.NEXT_PUBLIC_NETWORK ?? "base-mainnet"],
           ].map(([k, v]) => (
             <div key={String(k)} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, paddingTop: 10, borderTop: "1px solid var(--border-subtle)" }}>
               <span style={{ color: "var(--text-tertiary)" }}>{k}</span>
@@ -2888,7 +2888,7 @@ export default function Dashboard() {
         <div style={{ margin: "0 14px 8px", padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.1)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>Network</span>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", color: "var(--violet-300)", fontFamily: "var(--font-mono)" }}>{(system?.cdpNetwork ?? "base-sepolia").toUpperCase()}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", color: "var(--violet-300)", fontFamily: "var(--font-mono)" }}>{(system?.cdpNetwork ?? "base-mainnet").toUpperCase()}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>CDP</span>

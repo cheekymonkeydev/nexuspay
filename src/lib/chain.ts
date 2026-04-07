@@ -24,7 +24,7 @@ const RPC: Record<string, string> = {
 const BALANCE_OF_SELECTOR = "0x70a08231";
 
 function getNetwork(): string {
-  return process.env.NETWORK ?? "base-sepolia";
+  return process.env.NETWORK ?? "base-mainnet";
 }
 
 /**
