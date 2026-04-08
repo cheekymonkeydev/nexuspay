@@ -246,14 +246,17 @@ async function purchaseMPP(
 
   let amount = 0;
   const { valid, data: challengeData } = verifyChallenge(
-    challenge.id, challenge.realm ?? "", challenge.method as string,
-    (challenge.intent ?? "") as string, challenge.request,
+    challenge.id,
+    challenge.realm ?? "",
+    challenge.method ?? "",
+    challenge.intent ?? "",
+    challenge.request ?? "",
   );
   if (valid && challengeData) {
     amount = parseFloat(challengeData.amount);
   } else {
     try {
-      const decoded = JSON.parse(Buffer.from(challenge.request, "base64url").toString("utf8"));
+      const decoded = JSON.parse(Buffer.from(challenge.request ?? "", "base64url").toString("utf8"));
       amount = typeof decoded.amount === "string" ? parseFloat(decoded.amount) : (decoded.amount as number);
     } catch {
       throw new Error("Cannot decode MPP challenge amount");
