@@ -247,7 +247,7 @@ async function purchaseMPP(
   let amount = 0;
   const { valid, data: challengeData } = verifyChallenge(
     challenge.id, challenge.realm ?? "", challenge.method as string,
-    challenge.intent as string, challenge.request,
+    (challenge.intent ?? "") as string, challenge.request,
   );
   if (valid && challengeData) {
     amount = parseFloat(challengeData.amount);
