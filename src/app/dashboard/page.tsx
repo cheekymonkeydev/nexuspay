@@ -2030,7 +2030,7 @@ function MarketplaceTab() {
             ? <EmptyState icon="⊛" title="No listings yet" sub='Click "+ List Service" to publish your first service' />
             : (
               <DataTable
-                columns={["Name", "Category", "Protocol", "Price", "Purchases", "Revenue", "Status", ""]}
+                headers={["Name", "Category", "Protocol", "Price", "Purchases", "Revenue", "Status", ""]}
                 rows={(myListings ?? []).map(l => [
                   <span key="n" style={{ fontWeight: 600 }}>{l.name}</span>,
                   l.category.replace("_", " "),
