@@ -1922,8 +1922,11 @@ function MarketplaceTab() {
             : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
                 {(listings ?? []).map(l => (
-                  <GlassCard key={l.id} style={{ padding: 20, cursor: "pointer", transition: "transform 0.2s" }}
-                    onClick={() => { setSelectedListing(l); setBuyResult(""); }}>
+                  <div key={l.id} style={{ cursor: "pointer", transition: "transform 0.2s" }}
+                    onClick={() => { setSelectedListing(l); setBuyResult(""); }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}>
+                  <GlassCard style={{ padding: 20, height: "100%" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 20 }}>{CATEGORY_ICON[l.category] ?? "⊛"}</span>
@@ -1959,6 +1962,7 @@ function MarketplaceTab() {
                       </div>
                     )}
                   </GlassCard>
+                  </div>
                 ))}
               </div>
             )
