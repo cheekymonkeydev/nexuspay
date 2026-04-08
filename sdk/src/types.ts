@@ -225,6 +225,107 @@ export interface MppFulfillResult {
   remainingBalance: number;
 }
 
+// ─── Marketplace ─────────────────────────────────────────────────────────────
+
+export type ServiceType = "DATA_FEED" | "AI_MODEL" | "API_GATEWAY" | "COMPUTE" | "STORAGE" | "AGENT_SKILL" | "COMMUNICATION";
+export type PaymentProtocol = "X402" | "MPP" | "P2P";
+export type ListingStatus = "DRAFT" | "ACTIVE" | "SUSPENDED" | "DEPRECATED";
+export type PricingModel = "per-call" | "per-month" | "per-token" | "metered" | "free";
+
+export interface MarketplaceListing {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  shortDesc: string;
+  logoUrl?: string;
+  category: ServiceType;
+  tags: string[];
+  providerAgentId?: string;
+  providerName: string;
+  providerUrl?: string;
+  priceUsdc: number;
+  pricingModel: PricingModel;
+  protocol: PaymentProtocol;
+  endpointPath?: string;
+  externalUrl?: string;
+  capabilities: Record<string, unknown>;
+  slaUptime?: number;
+  avgLatencyMs?: number;
+  totalRevenue: number;
+  totalPurchases: number;
+  avgRating?: number;
+  reviewCount: number;
+  status: ListingStatus;
+  isVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ServicePurchase {
+  id: string;
+  listingId: string;
+  buyerAgentId: string;
+  transactionId?: string;
+  amountUsdc: number;
+  protocol: PaymentProtocol;
+  accessToken?: string;
+  accessExpiresAt?: string;
+  createdAt: string;
+}
+
+export interface ServiceReview {
+  id: string;
+  listingId: string;
+  reviewerAgentId: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface CreateListingOptions {
+  slug: string;
+  name: string;
+  description: string;
+  shortDesc: string;
+  logoUrl?: string;
+  category: ServiceType;
+  tags?: string[];
+  providerAgentId?: string;
+  providerName: string;
+  providerUrl?: string;
+  priceUsdc: number;
+  pricingModel?: PricingModel;
+  protocol: PaymentProtocol;
+  endpointPath?: string;
+  externalUrl?: string;
+  capabilities?: Record<string, unknown>;
+  slaUptime?: number;
+  avgLatencyMs?: number;
+}
+
+export interface MarketplaceSearchOptions {
+  category?: ServiceType;
+  protocol?: PaymentProtocol;
+  q?: string;
+  maxPrice?: number;
+  sort?: "rating" | "price_asc" | "price_desc" | "purchases" | "newest";
+  verified?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export interface MarketplacePurchaseResult {
+  purchaseId: string;
+  transactionId?: string;
+  amountPaid: number;
+  protocol: string;
+  accessToken?: string;
+  accessExpiresAt?: string;
+  paymentInstructions?: { protocol: string; url?: string; sdkCall?: string };
+  responseBody?: unknown;
+}
+
 // ─── x402 Client ─────────────────────────────────────────────────────────────
 
 export interface X402FetchOptions {

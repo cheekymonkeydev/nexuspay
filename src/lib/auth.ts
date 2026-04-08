@@ -17,6 +17,8 @@ export const SCOPES: Record<string, string> = {
   "x402:write":         "Create paywalls and process payments",
   "keys:read":          "View API keys",
   "keys:write":         "Create and revoke API keys",
+  "marketplace:read":   "Browse marketplace listings",
+  "marketplace:write":  "Create and manage marketplace listings",
 };
 
 const jwtSecret = () =>

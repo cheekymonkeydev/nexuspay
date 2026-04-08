@@ -28,6 +28,12 @@ import type {
   MppFulfillResult,
   X402FetchOptions,
   X402FetchResult,
+  MarketplaceListing,
+  ServicePurchase,
+  ServiceReview,
+  CreateListingOptions,
+  MarketplaceSearchOptions,
+  MarketplacePurchaseResult,
 } from "./types";
 import { NexusPayError } from "./types";
 
@@ -137,6 +143,51 @@ export class NexusPay {
         agentId: opts.agentId ?? "",
         tier: opts.tier ?? "",
       }),
+  };
+
+  // ─── Marketplace ──────────────────────────────────────────────────────────
+
+  readonly marketplace = {
+    /** Browse and search marketplace listings */
+    list: (opts: MarketplaceSearchOptions = {}): Promise<MarketplaceListing[]> =>
+      this.request("GET", "/api/marketplace", undefined, {
+        category: opts.category ?? "",
+        protocol: opts.protocol ?? "",
+        q:        opts.q        ?? "",
+        maxPrice: opts.maxPrice?.toString() ?? "",
+        sort:     opts.sort     ?? "",
+        verified: opts.verified ? "true" : "",
+        page:     opts.page?.toString()  ?? "",
+        limit:    opts.limit?.toString() ?? "",
+      }),
+
+    /** Get a listing by id or slug, including capabilities manifest */
+    get: (idOrSlug: string): Promise<MarketplaceListing> =>
+      this.request("GET", `/api/marketplace/${idOrSlug}`),
+
+    /** Purchase access to a service — handles P2P, x402, or MPP payment automatically */
+    purchase: (idOrSlug: string, opts: { agentId: string; maxAmountUsdc?: number }): Promise<MarketplacePurchaseResult> =>
+      this.request("POST", `/api/marketplace/${idOrSlug}/purchase`, opts),
+
+    /** Submit a review (must have purchased first) */
+    review: (idOrSlug: string, opts: { reviewerAgentId: string; rating: number; comment?: string }): Promise<ServiceReview> =>
+      this.request("POST", `/api/marketplace/${idOrSlug}/review`, opts),
+
+    /** List services you have created */
+    myListings: (): Promise<MarketplaceListing[]> =>
+      this.request("GET", "/api/marketplace/my/listings"),
+
+    /** List purchases made by a given agent */
+    myPurchases: (agentId: string): Promise<ServicePurchase[]> =>
+      this.request("GET", "/api/marketplace/my/purchases", undefined, { agentId }),
+
+    /** Create a new marketplace listing (starts as DRAFT) */
+    create: (opts: CreateListingOptions): Promise<MarketplaceListing> =>
+      this.request("POST", "/api/marketplace", opts),
+
+    /** Update a listing */
+    update: (id: string, opts: Partial<CreateListingOptions> & { status?: string }): Promise<MarketplaceListing> =>
+      this.request("PATCH", `/api/marketplace/${id}`, opts),
   };
 
   // ─── x402 Client (outbound) ───────────────────────────────────────────────

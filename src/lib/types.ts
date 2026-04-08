@@ -69,6 +69,46 @@ export const CreateApiKeyInput = z.object({
 });
 export type CreateApiKeyInput = z.infer<typeof CreateApiKeyInput>;
 
+// --- Marketplace ---
+export const SERVICE_TYPES = ["DATA_FEED", "AI_MODEL", "API_GATEWAY", "COMPUTE", "STORAGE", "AGENT_SKILL", "COMMUNICATION"] as const;
+export const PAYMENT_PROTOCOLS = ["X402", "MPP", "P2P"] as const;
+export const LISTING_STATUSES = ["DRAFT", "ACTIVE", "SUSPENDED", "DEPRECATED"] as const;
+
+export const CreateListingInput = z.object({
+  slug:           z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
+  name:           z.string().min(1).max(120),
+  description:    z.string().min(1),
+  shortDesc:      z.string().min(1).max(160),
+  logoUrl:        z.string().url().optional(),
+  category:       z.enum(SERVICE_TYPES),
+  tags:           z.array(z.string()).default([]),
+  providerAgentId: z.string().optional(),
+  providerName:   z.string().min(1),
+  providerUrl:    z.string().url().optional(),
+  priceUsdc:      z.number().min(0),
+  pricingModel:   z.enum(["per-call", "per-month", "per-token", "metered", "free"]).default("per-call"),
+  protocol:       z.enum(PAYMENT_PROTOCOLS),
+  endpointPath:   z.string().optional(),
+  externalUrl:    z.string().url().optional(),
+  capabilities:   z.record(z.unknown()).default({}),
+  slaUptime:      z.number().min(0).max(100).optional(),
+  avgLatencyMs:   z.number().int().positive().optional(),
+});
+export type CreateListingInput = z.infer<typeof CreateListingInput>;
+
+export const PurchaseListingInput = z.object({
+  agentId:      z.string().min(1),
+  maxAmountUsdc: z.number().positive().optional(),
+});
+export type PurchaseListingInput = z.infer<typeof PurchaseListingInput>;
+
+export const CreateReviewInput = z.object({
+  reviewerAgentId: z.string().min(1),
+  rating:          z.number().int().min(1).max(5),
+  comment:         z.string().max(1000).optional(),
+});
+export type CreateReviewInput = z.infer<typeof CreateReviewInput>;
+
 // --- Response wrappers ---
 export interface ApiResponse<T = unknown> {
   success: boolean;

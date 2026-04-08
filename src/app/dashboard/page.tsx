@@ -107,7 +107,7 @@ function WalletStatus() {
 }
 
 /* ═══ Constants ═══ */
-type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "webhooks" | "mpp";
+type Tab = "overview" | "wallets" | "transactions" | "p2p" | "policies" | "x402" | "analytics" | "keys" | "webhooks" | "mpp" | "marketplace";
 const tabList: { key: Tab; label: string; icon: string; badge?: boolean }[] = [
   { key: "overview", label: "Overview", icon: "◎" },
   { key: "wallets", label: "Wallets", icon: "◈" },
@@ -116,6 +116,7 @@ const tabList: { key: Tab; label: string; icon: string; badge?: boolean }[] = [
   { key: "policies", label: "Policies", icon: "⊞" },
   { key: "x402", label: "x402", icon: "⚡" },
   { key: "mpp", label: "MPP", icon: "⬡" },
+  { key: "marketplace", label: "Marketplace", icon: "⊛" },
   { key: "analytics", label: "Analytics", icon: "◉" },
   { key: "keys", label: "API Keys", icon: "⌗" },
   { key: "webhooks", label: "Webhooks", icon: "⇡" },
@@ -1781,6 +1782,342 @@ interface AnalyticsData {
   topAgents: { agentId: string; volume: number; count: number; balance: number; status: string }[];
 }
 
+/* ═══ Marketplace Tab ═══ */
+
+interface MarketplaceListing {
+  id: string; slug: string; name: string; shortDesc: string;
+  category: string; protocol: string; priceUsdc: number;
+  pricingModel: string; providerName: string; logoUrl?: string;
+  avgRating?: number; reviewCount: number; totalPurchases: number;
+  status: string; isVerified: boolean; externalUrl?: string;
+  endpointPath?: string; capabilities: Record<string, unknown>;
+  description: string; tags: string[];
+}
+
+const PROTOCOL_COLOR: Record<string, string> = {
+  X402: "var(--cyan-400)", MPP: "var(--violet-400)", P2P: "#10b981",
+};
+const CATEGORY_ICON: Record<string, string> = {
+  DATA_FEED: "◈", AI_MODEL: "⬡", API_GATEWAY: "⚡", COMPUTE: "◉",
+  STORAGE: "⊞", AGENT_SKILL: "⊛", COMMUNICATION: "⇡",
+};
+
+function MarketplaceTab() {
+  const [view, setView] = useState<"browse" | "my-listings" | "create">("browse");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [protocol, setProtocol] = useState("");
+  const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
+  const [buyAgentId, setBuyAgentId] = useState("");
+  const [buying, setBuying] = useState(false);
+  const [buyResult, setBuyResult] = useState<string>("");
+
+  // Create form state
+  const [form, setForm] = useState({
+    slug: "", name: "", shortDesc: "", description: "", category: "DATA_FEED",
+    protocol: "X402", priceUsdc: "", pricingModel: "per-call",
+    providerName: "", externalUrl: "", tags: "",
+  });
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+
+  const query = new URLSearchParams();
+  if (search)   query.set("q", search);
+  if (category) query.set("category", category);
+  if (protocol) query.set("protocol", protocol);
+
+  const { data: listings, loading, refetch } = useApi<MarketplaceListing[]>(
+    `/api/marketplace?${query.toString()}`
+  );
+  const { data: myListings, refetch: refetchMy } = useApi<MarketplaceListing[]>("/api/marketplace/my/listings");
+  const { data: wallets } = useApi<Wallet[]>("/api/wallets");
+
+  const handleBuy = async () => {
+    if (!selectedListing || !buyAgentId) return;
+    setBuying(true); setBuyResult("");
+    try {
+      const res = await fetch(`/api/marketplace/${selectedListing.id}/purchase`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: buyAgentId }),
+      });
+      const json = await res.json();
+      if (!json.success) { setBuyResult("Error: " + json.error); return; }
+      setBuyResult(`✓ Purchased! Paid $${json.data.amountPaid?.toFixed(4) ?? "0"}`);
+      refetch();
+    } catch { setBuyResult("Network error"); }
+    finally { setBuying(false); }
+  };
+
+  const handleCreate = async () => {
+    setCreating(true); setCreateErr("");
+    try {
+      const res = await fetch("/api/marketplace", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          priceUsdc: parseFloat(form.priceUsdc) || 0,
+          tags: form.tags.split(",").map(t => t.trim()).filter(Boolean),
+          capabilities: {},
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) { setCreateErr(json.error || "Failed"); return; }
+      setView("my-listings"); refetchMy();
+      setForm({ slug:"", name:"", shortDesc:"", description:"", category:"DATA_FEED",
+        protocol:"X402", priceUsdc:"", pricingModel:"per-call", providerName:"", externalUrl:"", tags:"" });
+    } catch { setCreateErr("Network error"); }
+    finally { setCreating(false); }
+  };
+
+  const activateListing = async (id: string, activate: boolean) => {
+    await fetch(`/api/marketplace/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: activate ? "ACTIVE" : "DRAFT" }),
+    });
+    refetchMy();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-display)" }}>Agent Economy Marketplace</h3>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
+            Discover and purchase services — data feeds, AI models, APIs, agent skills
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {(["browse", "my-listings", "create"] as const).map(v => (
+            <Btn key={v} variant={view === v ? "primary" : "secondary"} onClick={() => setView(v)}>
+              {v === "browse" ? "Browse" : v === "my-listings" ? "My Listings" : "+ List Service"}
+            </Btn>
+          ))}
+        </div>
+      </div>
+
+      {/* Browse */}
+      {view === "browse" && (
+        <>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Input value={search} onChange={setSearch} placeholder="Search services..." style={{ flex: 1, minWidth: 200 }} />
+            <select value={category} onChange={e => setCategory(e.target.value)}
+              style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+              <option value="">All Categories</option>
+              {["DATA_FEED","AI_MODEL","API_GATEWAY","COMPUTE","STORAGE","AGENT_SKILL","COMMUNICATION"].map(c => (
+                <option key={c} value={c}>{c.replace("_", " ")}</option>
+              ))}
+            </select>
+            <select value={protocol} onChange={e => setProtocol(e.target.value)}
+              style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+              <option value="">All Protocols</option>
+              <option value="X402">x402</option>
+              <option value="MPP">MPP</option>
+              <option value="P2P">P2P</option>
+            </select>
+          </div>
+
+          {loading ? <Loader /> : (listings ?? []).length === 0
+            ? <EmptyState icon="⊛" title="No services yet" sub="Be the first to list a service in the marketplace" />
+            : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+                {(listings ?? []).map(l => (
+                  <GlassCard key={l.id} style={{ padding: 20, cursor: "pointer", transition: "transform 0.2s" }}
+                    onClick={() => { setSelectedListing(l); setBuyResult(""); }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>{CATEGORY_ICON[l.category] ?? "⊛"}</span>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, fontFamily: "var(--font-display)" }}>{l.name}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{l.providerName}</div>
+                        </div>
+                      </div>
+                      {l.isVerified && <span style={{ fontSize: 10, color: "var(--cyan-400)", fontWeight: 700 }}>✓ VERIFIED</span>}
+                    </div>
+                    <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>{l.shortDesc}</p>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                          background: "rgba(139,92,246,0.1)", color: "var(--violet-300)" }}>
+                          {l.category.replace("_"," ")}
+                        </span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                          background: "rgba(6,182,212,0.1)", color: PROTOCOL_COLOR[l.protocol] }}>
+                          {l.protocol}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "var(--font-display)" }}>
+                          ${l.priceUsdc.toFixed(4)}
+                        </div>
+                        <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{l.pricingModel}</div>
+                      </div>
+                    </div>
+                    {(l.avgRating ?? 0) > 0 && (
+                      <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-tertiary)" }}>
+                        {"★".repeat(Math.round(l.avgRating ?? 0))}{"☆".repeat(5 - Math.round(l.avgRating ?? 0))} {l.avgRating?.toFixed(1)} ({l.reviewCount})
+                      </div>
+                    )}
+                  </GlassCard>
+                ))}
+              </div>
+            )
+          }
+
+          {/* Purchase modal */}
+          {selectedListing && (
+            <Modal title={selectedListing.name} onClose={() => setSelectedListing(null)}>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 14 }}>{selectedListing.description}</p>
+              <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                <Badge variant="default">{selectedListing.category.replace("_"," ")}</Badge>
+                <Badge variant="default">{selectedListing.protocol}</Badge>
+                {selectedListing.isVerified && <Badge variant="success">Verified</Badge>}
+              </div>
+              <div style={{ background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: 12, marginBottom: 14, fontSize: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>Price</span>
+                  <span style={{ fontWeight: 700 }}>${selectedListing.priceUsdc.toFixed(4)} USDC / {selectedListing.pricingModel}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>Provider</span>
+                  <span>{selectedListing.providerName}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>Purchases</span>
+                  <span>{selectedListing.totalPurchases}</span>
+                </div>
+              </div>
+              {(selectedListing.externalUrl || selectedListing.endpointPath) && (
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)",
+                  background: "var(--surface-2)", padding: 8, borderRadius: "var(--radius-sm)", marginBottom: 14, wordBreak: "break-all" }}>
+                  {selectedListing.externalUrl ?? selectedListing.endpointPath}
+                </div>
+              )}
+              <Field label="Paying Agent">
+                <select value={buyAgentId} onChange={e => setBuyAgentId(e.target.value)}
+                  style={{ width: "100%", background: "var(--surface-1)", border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+                  <option value="">Select agent wallet...</option>
+                  {(wallets ?? []).map(w => (
+                    <option key={w.agentId} value={w.agentId}>{w.agentId} (${w.balanceUsdc.toFixed(2)})</option>
+                  ))}
+                </select>
+              </Field>
+              {buyResult && (
+                <div style={{ fontSize: 13, color: buyResult.startsWith("✓") ? "#10b981" : "#f87171", marginBottom: 10 }}>
+                  {buyResult}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+                <Btn variant="secondary" onClick={() => setSelectedListing(null)}>Cancel</Btn>
+                <Btn onClick={handleBuy} disabled={buying || !buyAgentId}>
+                  {buying ? "Processing..." : `Buy for $${selectedListing.priceUsdc.toFixed(4)}`}
+                </Btn>
+              </div>
+            </Modal>
+          )}
+        </>
+      )}
+
+      {/* My Listings */}
+      {view === "my-listings" && (
+        <>
+          {(myListings ?? []).length === 0
+            ? <EmptyState icon="⊛" title="No listings yet" sub='Click "+ List Service" to publish your first service' />
+            : (
+              <DataTable
+                columns={["Name", "Category", "Protocol", "Price", "Purchases", "Revenue", "Status", ""]}
+                rows={(myListings ?? []).map(l => [
+                  <span key="n" style={{ fontWeight: 600 }}>{l.name}</span>,
+                  l.category.replace("_", " "),
+                  <span key="p" style={{ color: PROTOCOL_COLOR[l.protocol] }}>{l.protocol}</span>,
+                  `$${l.priceUsdc.toFixed(4)}`,
+                  l.totalPurchases,
+                  `$${(l as unknown as { totalRevenue: number }).totalRevenue?.toFixed(2) ?? "0.00"}`,
+                  <Badge key="s" variant={l.status === "ACTIVE" ? "success" : "default"}>{l.status}</Badge>,
+                  <button key="a" onClick={() => activateListing(l.id, l.status !== "ACTIVE")}
+                    style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+                      background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)",
+                      color: "var(--violet-300)", cursor: "pointer" }}>
+                    {l.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                  </button>,
+                ])}
+              />
+            )
+          }
+        </>
+      )}
+
+      {/* Create listing form */}
+      {view === "create" && (
+        <GlassCard style={{ padding: 24, maxWidth: 600 }}>
+          <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 20 }}>List a New Service</h4>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Name"><Input value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Bitcoin Price Feed" /></Field>
+            <Field label="Slug (URL-safe)"><Input value={form.slug} onChange={v => setForm(f => ({ ...f, slug: v }))} placeholder="btc-price-feed" /></Field>
+          </div>
+          <Field label="Short Description (160 chars)">
+            <Input value={form.shortDesc} onChange={v => setForm(f => ({ ...f, shortDesc: v }))} placeholder="Real-time BTC/USD price from Coinbase" />
+          </Field>
+          <Field label="Full Description">
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Describe your service in detail..."
+              style={{ width: "100%", minHeight: 80, background: "var(--surface-1)", border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)",
+                fontSize: 13, resize: "vertical", boxSizing: "border-box" }} />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+            <Field label="Category">
+              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                style={{ width: "100%", background: "var(--surface-1)", border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+                {["DATA_FEED","AI_MODEL","API_GATEWAY","COMPUTE","STORAGE","AGENT_SKILL","COMMUNICATION"].map(c => (
+                  <option key={c} value={c}>{c.replace("_"," ")}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Protocol">
+              <select value={form.protocol} onChange={e => setForm(f => ({ ...f, protocol: e.target.value }))}
+                style={{ width: "100%", background: "var(--surface-1)", border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+                <option value="X402">X402</option>
+                <option value="MPP">MPP</option>
+                <option value="P2P">P2P</option>
+              </select>
+            </Field>
+            <Field label="Pricing Model">
+              <select value={form.pricingModel} onChange={e => setForm(f => ({ ...f, pricingModel: e.target.value }))}
+                style={{ width: "100%", background: "var(--surface-1)", border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
+                <option value="per-call">Per Call</option>
+                <option value="per-month">Per Month</option>
+                <option value="per-token">Per Token</option>
+                <option value="metered">Metered</option>
+                <option value="free">Free</option>
+              </select>
+            </Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Price (USDC)"><Input value={form.priceUsdc} onChange={v => setForm(f => ({ ...f, priceUsdc: v }))} placeholder="0.001" type="number" /></Field>
+            <Field label="Provider Name"><Input value={form.providerName} onChange={v => setForm(f => ({ ...f, providerName: v }))} placeholder="Your name or org" /></Field>
+          </div>
+          <Field label="Service URL">
+            <Input value={form.externalUrl} onChange={v => setForm(f => ({ ...f, externalUrl: v }))} placeholder="https://your-api.com/endpoint" />
+          </Field>
+          <Field label="Tags (comma-separated)">
+            <Input value={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} placeholder="bitcoin, price, real-time" />
+          </Field>
+          {createErr && <div style={{ fontSize: 13, color: "#f87171", marginBottom: 10 }}>{createErr}</div>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+            <Btn variant="secondary" onClick={() => setView("browse")}>Cancel</Btn>
+            <Btn onClick={handleCreate} disabled={creating}>{creating ? "Creating..." : "Create Listing"}</Btn>
+          </div>
+        </GlassCard>
+      )}
+    </div>
+  );
+}
+
 const CATEGORY_COLORS = [
   "var(--gradient-brand)", "var(--cyan-400)", "var(--violet-400)",
   "#f59e0b", "#10b981", "#f87171", "#a78bfa", "#34d399",
@@ -2832,6 +3169,7 @@ export default function Dashboard() {
   const content: Record<Tab, React.ReactNode> = {
     overview: <OverviewTab />, wallets: <WalletsTab />, transactions: <TransactionsTab />,
     p2p: <P2PTab />, policies: <PoliciesTab />, x402: <X402Tab />, mpp: <MppTab />,
+    marketplace: <MarketplaceTab />,
     analytics: <AnalyticsTab />, keys: <ApiKeysTab />, webhooks: <WebhooksTab />,
   };
 
