@@ -189,6 +189,107 @@ model MppPayment {
   @@map("mpp_payments")
 }
 
+enum ServiceType {
+  DATA_FEED
+  AI_MODEL
+  API_GATEWAY
+  COMPUTE
+  STORAGE
+  AGENT_SKILL
+  COMMUNICATION
+
+  @@map("service_type")
+}
+
+enum PaymentProtocol {
+  X402
+  MPP
+  P2P
+
+  @@map("payment_protocol")
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  DEPRECATED
+
+  @@map("listing_status")
+}
+
+model MarketplaceListing {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  name            String
+  description     String
+  shortDesc       String
+  logoUrl         String?
+  category        ServiceType
+  tags            String[]
+  providerAgentId String?
+  providerName    String
+  providerUrl     String?
+  priceUsdc       Float
+  pricingModel    String          @default("per-call")
+  protocol        PaymentProtocol
+  endpointPath    String?
+  externalUrl     String?
+  capabilities    Json            @default("{}")
+  slaUptime       Float?
+  avgLatencyMs    Int?
+  totalRevenue    Float           @default(0)
+  totalPurchases  Int             @default(0)
+  avgRating       Float?
+  reviewCount     Int             @default(0)
+  status          ListingStatus   @default(DRAFT)
+  isVerified      Boolean         @default(false)
+  ownerId         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  reviews         ServiceReview[]
+  purchases       ServicePurchase[]
+
+  @@index([category])
+  @@index([status])
+  @@index([protocol])
+  @@index([priceUsdc])
+  @@map("marketplace_listings")
+}
+
+model ServiceReview {
+  id              String   @id @default(cuid())
+  listingId       String
+  reviewerAgentId String
+  rating          Int
+  comment         String?
+  createdAt       DateTime @default(now())
+
+  listing         MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, reviewerAgentId])
+  @@map("service_reviews")
+}
+
+model ServicePurchase {
+  id              String          @id @default(cuid())
+  listingId       String
+  buyerAgentId    String
+  transactionId   String?
+  amountUsdc      Float
+  protocol        PaymentProtocol
+  accessToken     String?
+  accessExpiresAt DateTime?
+  createdAt       DateTime        @default(now())
+
+  listing         MarketplaceListing @relation(fields: [listingId], references: [id])
+
+  @@index([buyerAgentId])
+  @@index([listingId])
+  @@map("service_purchases")
+}
+
 model WebhookDelivery {
   id          String   @id @default(cuid())
   webhookId   String
