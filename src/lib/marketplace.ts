@@ -102,24 +102,26 @@ async function purchaseP2P(
     ).toString("base64url");
   }
 
-  const [, , , purchase] = await prisma.$transaction([
+  const purchase = await prisma.$transaction(async (tx) => {
     // Debit buyer
-    prisma.agentWallet.update({
+    await tx.agentWallet.update({
       where: { agentId: buyerAgentId },
       data: { balanceUsdc: { decrement: price } },
-    }),
-    // Credit provider if it's an internal agent
-    ...(listing.providerAgentId
-      ? [prisma.agentWallet.update({
-          where: { agentId: listing.providerAgentId },
-          data: { balanceUsdc: { increment: price } },
-        })]
-      : [prisma.treasury.update({
-          where: { id: "default" },
-          data: { balanceUsdc: { increment: price }, totalFunded: { increment: price } },
-        })]),
+    });
+    // Credit provider if it's an internal agent, else credit treasury
+    if (listing.providerAgentId) {
+      await tx.agentWallet.update({
+        where: { agentId: listing.providerAgentId },
+        data: { balanceUsdc: { increment: price } },
+      });
+    } else {
+      await tx.treasury.update({
+        where: { id: "default" },
+        data: { balanceUsdc: { increment: price }, totalFunded: { increment: price } },
+      });
+    }
     // Transaction record
-    prisma.transaction.create({
+    await tx.transaction.create({
       data: {
         fromAgentId: buyerAgentId,
         toAddress:   listing.providerAgentId ?? `marketplace:${listing.id}`,
@@ -129,9 +131,9 @@ async function purchaseP2P(
         category:    "marketplace",
         memo:        `Marketplace: ${listing.name}`,
       },
-    }),
+    });
     // Purchase record
-    prisma.servicePurchase.create({
+    return tx.servicePurchase.create({
       data: {
         listingId:      listing.id,
         buyerAgentId,
@@ -140,8 +142,8 @@ async function purchaseP2P(
         accessToken,
         accessExpiresAt,
       },
-    }),
-  ]);
+    });
+  });
 
   // Update listing stats
   await prisma.marketplaceListing.update({
