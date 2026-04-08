@@ -1900,7 +1900,7 @@ function MarketplaceTab() {
       {view === "browse" && (
         <>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Input value={search} onChange={setSearch} placeholder="Search services..." style={{ flex: 1, minWidth: 200 }} />
+            <div style={{ flex: 1, minWidth: 200 }}><Input value={search} onChange={setSearch} placeholder="Search services..." /></div>
             <select value={category} onChange={e => setCategory(e.target.value)}
               style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 12px", color: "var(--text-primary)", fontSize: 13 }}>
               <option value="">All Categories</option>
